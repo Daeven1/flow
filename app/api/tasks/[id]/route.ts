@@ -1,0 +1,68 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { computeScheduledDate } from "@/lib/utils";
+import { getUser } from "@/lib/auth";
+import { getWorkNightDays } from "@/lib/workNightDays";
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  const userId = await getUser();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json();
+  const data: Record<string, unknown> = {};
+
+  if ("done" in body) {
+    data.done = body.done;
+    data.doneAt = body.done ? new Date() : null;
+  }
+  if ("name" in body) data.name = body.name;
+  if ("sprint" in body) data.sprint = Number(body.sprint);
+  if ("estMinutes" in body) data.estMinutes = Number(body.estMinutes);
+  if ("actualMinutes" in body)
+    data.actualMinutes = body.actualMinutes ? Number(body.actualMinutes) : null;
+  if ("workCategory" in body) data.workCategory = body.workCategory;
+
+  if ("deadline" in body) {
+    data.deadline = body.deadline ? new Date(body.deadline) : null;
+    if (body.deadline && !("scheduledDate" in body)) {
+      const existing = await prisma.task.findUnique({
+        where: { id: params.id, userId },
+      });
+      const workNightDays = await getWorkNightDays(userId);
+      data.scheduledDate = computeScheduledDate(
+        new Date(body.deadline),
+        (body.workCategory ?? existing?.workCategory ?? "STANDARD") as string,
+        Number(body.estMinutes ?? existing?.estMinutes ?? 30),
+        workNightDays
+      );
+    } else if (!body.deadline) {
+      data.scheduledDate = null;
+    }
+  }
+
+  if ("scheduledDate" in body) {
+    data.scheduledDate = body.scheduledDate ? new Date(body.scheduledDate) : null;
+  }
+
+  const task = await prisma.task.update({
+    where: { id: params.id, userId },
+    data,
+    include: { project: true },
+  });
+
+  return NextResponse.json(task);
+}
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
+  const userId = await getUser();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  await prisma.task.delete({ where: { id: params.id, userId } });
+  return NextResponse.json({ ok: true });
+}
