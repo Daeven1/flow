@@ -5,9 +5,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 
-const client = new Anthropic();
-
 export async function POST(req: Request) {
+  const client = new Anthropic();
   const userId = await getUser();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
