@@ -6,11 +6,12 @@ import { getWorkNightDays } from "@/lib/workNightDays";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const userId = await getUser();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { id } = await params;
   const body = await req.json();
   const data: Record<string, unknown> = {};
 
@@ -29,7 +30,7 @@ export async function PATCH(
     data.deadline = body.deadline ? new Date(body.deadline) : null;
     if (body.deadline && !("scheduledDate" in body)) {
       const existing = await prisma.task.findUnique({
-        where: { id: params.id, userId },
+        where: { id, userId },
       });
       const workNightDays = await getWorkNightDays(userId);
       data.scheduledDate = computeScheduledDate(
@@ -48,7 +49,7 @@ export async function PATCH(
   }
 
   const task = await prisma.task.update({
-    where: { id: params.id, userId },
+    where: { id, userId },
     data,
     include: { project: true },
   });
@@ -58,11 +59,12 @@ export async function PATCH(
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const userId = await getUser();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  await prisma.task.delete({ where: { id: params.id, userId } });
+  const { id } = await params;
+  await prisma.task.delete({ where: { id, userId } });
   return NextResponse.json({ ok: true });
 }

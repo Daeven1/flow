@@ -4,11 +4,12 @@ import { getUser } from "@/lib/auth";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const userId = await getUser();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { id } = await params;
   const body = await req.json();
   const { label, description, tasks } = body;
 
@@ -17,11 +18,11 @@ export async function PATCH(
   if ("description" in body) data.description = description;
 
   if (Array.isArray(tasks)) {
-    await prisma.templateTask.deleteMany({ where: { templateId: params.id } });
+    await prisma.templateTask.deleteMany({ where: { templateId: id } });
     await prisma.templateTask.createMany({
       data: tasks.map(
         (task: { name: string; leadDays: number; sprint: number; estMinutes: number; workCategory: string }, j: number) => ({
-          templateId: params.id,
+          templateId: id,
           name: task.name,
           leadDays: task.leadDays ?? 0,
           sprint: task.sprint ?? 4,
@@ -34,7 +35,7 @@ export async function PATCH(
   }
 
   const updated = await prisma.template.update({
-    where: { id: params.id, userId },
+    where: { id, userId },
     data,
     include: { tasks: { orderBy: { sortOrder: "asc" } } },
   });
@@ -44,11 +45,12 @@ export async function PATCH(
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const userId = await getUser();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  await prisma.template.delete({ where: { id: params.id, userId } });
+  const { id } = await params;
+  await prisma.template.delete({ where: { id, userId } });
   return NextResponse.json({ ok: true });
 }
