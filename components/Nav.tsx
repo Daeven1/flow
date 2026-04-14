@@ -40,6 +40,7 @@ export function Nav() {
   const [userInitial, setUserInitial] = useState<string>("?");
   const [mounted, setMounted] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
 
@@ -64,7 +65,10 @@ export function Nav() {
   // Close avatar menu when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideAvatar = avatarRef.current?.contains(target);
+      const insideDropdown = dropdownRef.current?.contains(target);
+      if (!insideAvatar && !insideDropdown) {
         setAvatarOpen(false);
       }
     }
@@ -135,7 +139,7 @@ export function Nav() {
           </button>
 
           {avatarOpen && mounted && createPortal(
-            <div className="fixed right-4 top-[56px] w-44 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-[9999]">
+            <div ref={dropdownRef} className="fixed right-4 top-[56px] w-44 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-[9999]">
               <Link
                 href="/settings"
                 onClick={() => setAvatarOpen(false)}
