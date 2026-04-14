@@ -19,6 +19,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const NAV_ITEMS = [
   { href: "/daily", label: "Daily", icon: CalendarDays },
@@ -37,7 +38,10 @@ export function Nav() {
   const [dark, setDark] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [userInitial, setUserInitial] = useState<string>("?");
+  const [mounted, setMounted] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     const isDark =
@@ -130,8 +134,8 @@ export function Nav() {
             {userInitial}
           </button>
 
-          {avatarOpen && (
-            <div className="absolute right-0 top-9 w-44 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-50">
+          {avatarOpen && mounted && createPortal(
+            <div className="fixed right-4 top-[56px] w-44 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-[9999]">
               <Link
                 href="/settings"
                 onClick={() => setAvatarOpen(false)}
@@ -147,7 +151,8 @@ export function Nav() {
                 <LogOut className="h-3.5 w-3.5" />
                 Sign out
               </button>
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       </div>
