@@ -82,7 +82,7 @@ export function Nav() {
   }
 
   return (
-    <nav className="flex items-center gap-1 px-4 h-[52px] bg-slate-900 dark:bg-zinc-900 border-b border-slate-800 dark:border-zinc-800 overflow-x-auto shrink-0">
+    <nav className="flex items-center gap-1 px-4 h-[52px] bg-slate-900 dark:bg-zinc-900 border-b border-slate-800 dark:border-zinc-800 shrink-0">
       {/* Brand */}
       <span className="text-xs font-black tracking-[0.2em] text-white mr-5 shrink-0">
         FLOW
@@ -112,7 +112,7 @@ export function Nav() {
       </div>
 
       {/* Right side controls */}
-      <div className="flex items-center gap-1 shrink-0 ml-2 overflow-visible">
+      <div className="flex items-center gap-1 shrink-0 ml-2">
         <button
           onClick={toggleDark}
           className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 dark:hover:bg-zinc-800 transition-colors"
@@ -131,7 +131,7 @@ export function Nav() {
           </button>
 
           {avatarOpen && (
-            <div className="fixed right-4 top-[52px] w-44 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-[9999]">
+            <div className="absolute right-0 top-9 w-44 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-50">
               <Link
                 href="/settings"
                 onClick={() => setAvatarOpen(false)}
