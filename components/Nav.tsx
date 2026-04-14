@@ -112,7 +112,7 @@ export function Nav() {
       </div>
 
       {/* Right side controls */}
-      <div className="flex items-center gap-1 shrink-0 ml-2">
+      <div className="flex items-center gap-1 shrink-0 ml-2 overflow-visible">
         <button
           onClick={toggleDark}
           className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 dark:hover:bg-zinc-800 transition-colors"
@@ -131,7 +131,7 @@ export function Nav() {
           </button>
 
           {avatarOpen && (
-            <div className="absolute right-0 top-9 w-40 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 z-50">
+            <div className="fixed right-4 top-[52px] w-44 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-[9999]">
               <Link
                 href="/settings"
                 onClick={() => setAvatarOpen(false)}
