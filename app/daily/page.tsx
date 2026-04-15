@@ -144,14 +144,18 @@ export default function DailyPage() {
         body: JSON.stringify({ text: log.brainDump }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        alert(`AI parsing failed (${res.status}): ${data.error ?? "Unknown error"}`);
+        return;
+      }
       setParsedTasks(
         (data.tasks || []).map((t: Omit<ParsedTask, "selected">) => ({
           ...t,
           selected: true,
         }))
       );
-    } catch {
-      alert("AI parsing failed. Check your ANTHROPIC_API_KEY.");
+    } catch (err) {
+      alert(`AI parsing failed: ${err instanceof Error ? err.message : "Network error"}`);
     } finally {
       setParsing(false);
     }
