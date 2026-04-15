@@ -5,16 +5,27 @@ import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 
 const DEFAULT_PRESETS = [
-  { name: "Grade Criterion A (per class)", sprint: 2, estMinutes: 60, workCategory: "GRADING", notes: "" },
-  { name: "Grade Criterion B (per class)", sprint: 2, estMinutes: 60, workCategory: "GRADING", notes: "" },
-  { name: "Grade Criterion C (per class)", sprint: 2, estMinutes: 60, workCategory: "GRADING", notes: "" },
-  { name: "Grade Criterion D (per class)", sprint: 2, estMinutes: 60, workCategory: "GRADING", notes: "" },
-  { name: "Write parent email", sprint: 3, estMinutes: 10, workCategory: "STANDARD", notes: "" },
-  { name: "Lesson setup & materials", sprint: 1, estMinutes: 20, workCategory: "STANDARD", notes: "" },
-  { name: "Write report (per student)", sprint: 2, estMinutes: 5, workCategory: "GRADING", notes: "" },
-  { name: "MIS data entry", sprint: 3, estMinutes: 15, workCategory: "STANDARD", notes: "" },
-  { name: "HOD meeting prep", sprint: 3, estMinutes: 20, workCategory: "STANDARD", notes: "" },
-  { name: "Create slide deck (1 lesson)", sprint: 4, estMinutes: 45, workCategory: "STANDARD", notes: "" },
+  { name: "Lesson Planning",                  sprint: 4, estMinutes: 60,  workCategory: "STANDARD", notes: "activities, slides, materials, UDL" },
+  { name: "Collaborative Planning",           sprint: 4, estMinutes: 60,  workCategory: "STANDARD", notes: "unit design, resource creation, alignment" },
+  { name: "Unit Building",                    sprint: 4, estMinutes: 90,  workCategory: "STANDARD", notes: "task-specific rubrics, concepts, timelines" },
+  { name: "Formative Feedback",               sprint: 2, estMinutes: 100, workCategory: "GRADING",  notes: "per class" },
+  { name: "Summative Assessment",             sprint: 2, estMinutes: 100, workCategory: "GRADING",  notes: "per class" },
+  { name: "Moderation",                       sprint: 2, estMinutes: 60,  workCategory: "GRADING",  notes: "" },
+  { name: "Lesson/Tools/Materials Setup",     sprint: 1, estMinutes: 15,  workCategory: "STANDARD", notes: "" },
+  { name: "Materials Prep",                   sprint: 3, estMinutes: 30,  workCategory: "STANDARD", notes: "wood, plywood, acrylic, cardboard, robots, etc." },
+  { name: "Check Missing Work",               sprint: 1, estMinutes: 10,  workCategory: "STANDARD", notes: "beginning of class" },
+  { name: "Advisory Prep",                    sprint: 3, estMinutes: 15,  workCategory: "STANDARD", notes: "" },
+  { name: "Parent Email",                     sprint: 3, estMinutes: 10,  workCategory: "STANDARD", notes: "" },
+  { name: "Unit Newsletter",                  sprint: 3, estMinutes: 15,  workCategory: "STANDARD", notes: "" },
+  { name: "Pre-Unit Reflection",              sprint: 4, estMinutes: 10,  workCategory: "STANDARD", notes: "" },
+  { name: "Mid-Unit Reflection",              sprint: 4, estMinutes: 10,  workCategory: "STANDARD", notes: "" },
+  { name: "Post-Unit Reflection",             sprint: 4, estMinutes: 15,  workCategory: "STANDARD", notes: "" },
+  { name: "Post Assessments",                 sprint: 3, estMinutes: 15,  workCategory: "STANDARD", notes: "" },
+  { name: "Student Spotlight / Recognition",  sprint: 3, estMinutes: 15,  workCategory: "STANDARD", notes: "" },
+  { name: "Update Timelines / Planning Docs", sprint: 3, estMinutes: 30,  workCategory: "STANDARD", notes: "" },
+  { name: "Write Professional Article / Blog",sprint: 4, estMinutes: 120, workCategory: "STANDARD", notes: "" },
+  { name: "Create Instructional Video",       sprint: 4, estMinutes: 90,  workCategory: "STANDARD", notes: "" },
+  { name: "Practice/Learn Design Software",   sprint: 4, estMinutes: 60,  workCategory: "STANDARD", notes: "" },
 ];
 
 async function seedPresetsIfEmpty(userId: string) {
@@ -35,6 +46,17 @@ export async function GET() {
     orderBy: { sortOrder: "asc" },
   });
   return NextResponse.json(presets);
+}
+
+export async function DELETE() {
+  const userId = await getUser();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  await prisma.taskPreset.deleteMany({ where: { userId } });
+  await prisma.taskPreset.createMany({
+    data: DEFAULT_PRESETS.map((p, i) => ({ ...p, userId, sortOrder: i })),
+  });
+  return NextResponse.json({ ok: true });
 }
 
 export async function POST(req: Request) {

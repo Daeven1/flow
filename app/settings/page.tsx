@@ -50,6 +50,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
 
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [resetPresetsConfirm, setResetPresetsConfirm] = useState(false);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [editPresetName, setEditPresetName] = useState("");
   const [editPresetSprint, setEditPresetSprint] = useState("4");
@@ -135,6 +136,12 @@ export default function SettingsPage() {
 
   async function deletePreset(id: string) {
     await fetch(`/api/presets/${id}`, { method: "DELETE" });
+    loadAll();
+  }
+
+  async function resetPresets() {
+    await fetch("/api/presets", { method: "DELETE" });
+    setResetPresetsConfirm(false);
     loadAll();
   }
 
@@ -246,11 +253,22 @@ export default function SettingsPage() {
 
       {/* ── Personal Task Presets ── */}
       <section className="space-y-4">
-        <div>
-          <h2 className="font-medium">My Task Presets</h2>
-          <p className="text-xs text-zinc-500 mt-1">
-            Your personal timing library for recurring task types. These are used as quick-fill when adding tasks, and the AI brain dump parser uses them to suggest accurate estimates.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-medium">My Task Presets</h2>
+            <p className="text-xs text-zinc-500 mt-1">
+              Your personal timing library for recurring task types. These are used as quick-fill when adding tasks, and the AI brain dump parser uses them to suggest accurate estimates.
+            </p>
+          </div>
+          {resetPresetsConfirm ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-zinc-500">Reset to defaults?</span>
+              <button onClick={() => setResetPresetsConfirm(false)} className="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">Cancel</button>
+              <button onClick={resetPresets} className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 transition-colors">Yes, reset</button>
+            </div>
+          ) : (
+            <button onClick={() => setResetPresetsConfirm(true)} className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 shrink-0 mt-0.5 transition-colors">Reset to defaults</button>
+          )}
         </div>
 
         <div className="rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
