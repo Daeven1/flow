@@ -37,6 +37,7 @@ export default function SettingsPage() {
 
   const [presets, setPresets] = useState<Preset[]>([]);
   const [resetPresetsConfirm, setResetPresetsConfirm] = useState(false);
+  const [resetPresetsLoading, setResetPresetsLoading] = useState(false);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [editPresetName, setEditPresetName] = useState("");
   const [editPresetSprint, setEditPresetSprint] = useState("4");
@@ -117,8 +118,11 @@ export default function SettingsPage() {
   }
 
   async function resetPresets() {
+    if (resetPresetsLoading) return;
+    setResetPresetsLoading(true);
     await fetch("/api/presets", { method: "DELETE" });
     setResetPresetsConfirm(false);
+    setResetPresetsLoading(false);
     loadAll();
   }
 
@@ -205,7 +209,7 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs text-zinc-500">Reset to defaults?</span>
               <button onClick={() => setResetPresetsConfirm(false)} className="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">Cancel</button>
-              <button onClick={resetPresets} className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 transition-colors">Yes, reset</button>
+              <button onClick={resetPresets} disabled={resetPresetsLoading} className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{resetPresetsLoading ? "Resetting…" : "Yes, reset"}</button>
             </div>
           ) : (
             <button onClick={() => setResetPresetsConfirm(true)} className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 shrink-0 mt-0.5 transition-colors">Reset to defaults</button>
