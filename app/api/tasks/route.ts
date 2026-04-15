@@ -18,6 +18,14 @@ export async function GET() {
   return NextResponse.json(tasks);
 }
 
+export async function DELETE() {
+  const userId = await getUser();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  await prisma.task.deleteMany({ where: { userId } });
+  return NextResponse.json({ ok: true });
+}
+
 export async function POST(req: Request) {
   const userId = await getUser();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

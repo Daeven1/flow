@@ -7,7 +7,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { SPRINT_LABELS, formatMinutes } from "@/lib/utils";
-import { Check, Plus, Pencil, X, ExternalLink } from "lucide-react";
+import { Check, Plus, Pencil, X, ExternalLink, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 const DAYS = [
@@ -62,6 +62,9 @@ export default function SettingsPage() {
   const [newPresetMins, setNewPresetMins] = useState("30");
   const [newPresetCategory, setNewPresetCategory] = useState("STANDARD");
   const [newPresetNotes, setNewPresetNotes] = useState("");
+
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
+  const [deleteAllDone, setDeleteAllDone] = useState(false);
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
@@ -189,6 +192,13 @@ export default function SettingsPage() {
     setTemplateSavedId(template.id);
     setTimeout(() => setTemplateSavedId(null), 2000);
     loadAll();
+  }
+
+  async function deleteAllTasks() {
+    await fetch("/api/tasks", { method: "DELETE" });
+    setDeleteAllConfirm(false);
+    setDeleteAllDone(true);
+    setTimeout(() => setDeleteAllDone(false), 3000);
   }
 
   if (loading) return <div className="text-sm text-zinc-400">Loading…</div>;
@@ -481,6 +491,50 @@ export default function SettingsPage() {
         <p className="font-medium text-zinc-700 dark:text-zinc-300">Note on work nights</p>
         <p>Changing work nights only affects tasks created or edited after saving. To update existing tasks, open them in Sprints or Tasks and re-save.</p>
       </div>
+
+      <hr className="border-slate-200 dark:border-zinc-800" />
+
+      {/* ── Danger Zone ── */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-medium text-red-600 dark:text-red-400">Danger Zone</h2>
+          <p className="text-xs text-zinc-500 mt-1">Irreversible actions. Be careful.</p>
+        </div>
+        <div className="rounded-xl border border-red-200 dark:border-red-900 p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">Delete all tasks</p>
+            <p className="text-xs text-zinc-500 mt-0.5">Permanently removes every task in your account. Projects and templates are unaffected.</p>
+          </div>
+          {deleteAllDone ? (
+            <span className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 shrink-0">
+              <Check className="h-3.5 w-3.5" /> All tasks deleted
+            </span>
+          ) : deleteAllConfirm ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-zinc-500">Are you sure?</span>
+              <button
+                onClick={() => setDeleteAllConfirm(false)}
+                className="text-xs px-2.5 py-1.5 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteAllTasks}
+                className="text-xs px-2.5 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                Yes, delete all
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setDeleteAllConfirm(true)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors shrink-0"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete all tasks
+            </button>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
