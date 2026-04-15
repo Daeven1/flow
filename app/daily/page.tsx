@@ -26,7 +26,9 @@ import {
   ChevronDown,
   ChevronUp,
   Trophy,
+  FolderOpen,
 } from "lucide-react";
+import { ProjectRow } from "@/components/ProjectRow";
 import {
   formatMinutes,
   formatRelativeDate,
@@ -46,6 +48,13 @@ interface Task {
   scheduledDate: string | null;
   workCategory: string;
   project: { id: string; name: string } | null;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  deadline: string | null;
+  tasks: { done: boolean }[];
 }
 
 interface DailyLog {
@@ -105,20 +114,24 @@ export default function DailyPage() {
     brainDump: "",
   });
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [parsedTasks, setParsedTasks] = useState<ParsedTask[]>([]);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showWeekGain, setShowWeekGain] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [logRes, tasksRes] = await Promise.all([
+    const [logRes, tasksRes, projectsRes] = await Promise.all([
       fetch(`/api/daily?date=${todayStr}`),
       fetch("/api/tasks"),
+      fetch("/api/projects"),
     ]);
     const logData = await logRes.json();
     const tasksData = await tasksRes.json();
+    const projectsData = await projectsRes.json();
     if (logData) setLog(logData);
     setTasks(tasksData);
+    setProjects(projectsData);
   }, [todayStr]);
 
   useEffect(() => {
@@ -373,6 +386,19 @@ export default function DailyPage() {
           </div>
         )}
       </div>
+
+      {/* ── Projects ── */}
+      {projects.length > 0 && (
+        <div className="rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800">
+            <FolderOpen className="h-3.5 w-3.5 text-indigo-400" />
+            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Projects</span>
+          </div>
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {projects.map((p) => <ProjectRow key={p.id} project={p} />)}
+          </div>
+        </div>
+      )}
 
       {/* ── ⚡ AUTO-ESCALATED: Due very soon ── */}
       {urgentNow.length > 0 && (

@@ -20,7 +20,8 @@ import {
   formatRelativeDate,
   urgencySort,
 } from "@/lib/utils";
-import { CheckCircle2, Circle, Pencil, Check, X, Moon, CalendarClock, Zap } from "lucide-react";
+import { CheckCircle2, Circle, Pencil, Check, X, Moon, CalendarClock, Zap, FolderOpen } from "lucide-react";
+import { ProjectRow } from "@/components/ProjectRow";
 import { parseISO, compareAsc, startOfDay, addDays, differenceInCalendarDays } from "date-fns";
 
 interface Task {
@@ -35,10 +36,18 @@ interface Task {
   project: { id: string; name: string } | null;
 }
 
+interface Project {
+  id: string;
+  name: string;
+  deadline: string | null;
+  tasks: { done: boolean }[];
+}
+
 type SortMode = "scheduled" | "deadline";
 
 export default function SprintsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>("scheduled");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -49,8 +58,12 @@ export default function SprintsPage() {
   const [editCategory, setEditCategory] = useState("STANDARD");
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/tasks");
-    setTasks(await res.json());
+    const [tasksRes, projectsRes] = await Promise.all([
+      fetch("/api/tasks"),
+      fetch("/api/projects"),
+    ]);
+    setTasks(await tasksRes.json());
+    setProjects(await projectsRes.json());
   }, []);
 
   useEffect(() => {
@@ -138,6 +151,19 @@ export default function SprintsPage() {
           ))}
         </div>
       </div>
+
+      {/* ── Projects ── */}
+      {projects.length > 0 && (
+        <div className="rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800">
+            <FolderOpen className="h-3.5 w-3.5 text-indigo-400" />
+            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Projects</span>
+          </div>
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {projects.map((p) => <ProjectRow key={p.id} project={p} />)}
+          </div>
+        </div>
+      )}
 
       {/* ⚡ Auto-escalated urgent tasks */}
       {urgentNow.length > 0 && (

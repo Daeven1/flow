@@ -13,7 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SPRINT_LABELS, formatMinutes, formatRelativeDate, urgencySort } from "@/lib/utils";
-import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2 } from "lucide-react";
+import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, FolderOpen } from "lucide-react";
+import { ProjectRow } from "@/components/ProjectRow";
 import { parseISO, startOfDay } from "date-fns";
 
 type FilterMode = "all" | "1" | "2" | "3" | "4" | "done";
@@ -38,8 +39,16 @@ interface Task {
   project: { id: string; name: string } | null;
 }
 
+interface Project {
+  id: string;
+  name: string;
+  deadline: string | null;
+  tasks: { done: boolean }[];
+}
+
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [filter, setFilter] = useState<FilterMode>("all");
   const [presets, setPresets] = useState<Preset[]>([]);
 
@@ -61,12 +70,14 @@ export default function TasksPage() {
   const [editCategory, setEditCategory] = useState("STANDARD");
 
   const load = useCallback(async () => {
-    const [tasksRes, presetsRes] = await Promise.all([
+    const [tasksRes, presetsRes, projectsRes] = await Promise.all([
       fetch("/api/tasks"),
       fetch("/api/presets"),
+      fetch("/api/projects"),
     ]);
     setTasks(await tasksRes.json());
     setPresets(await presetsRes.json());
+    setProjects(await projectsRes.json());
   }, []);
 
   useEffect(() => {
@@ -231,6 +242,19 @@ export default function TasksPage() {
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
             <Button size="sm" onClick={addTask} disabled={!newName.trim()}>Add task</Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Projects ── */}
+      {projects.length > 0 && filter === "all" && (
+        <div className="rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800">
+            <FolderOpen className="h-3.5 w-3.5 text-indigo-400" />
+            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Projects</span>
+          </div>
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {projects.map((p) => <ProjectRow key={p.id} project={p} />)}
           </div>
         </div>
       )}
