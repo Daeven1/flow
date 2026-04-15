@@ -61,6 +61,7 @@ interface ParsedTask {
   sprint: number;
   estMinutes: number;
   workCategory: string;
+  deadline: string; // YYYY-MM-DD, defaults to today
   selected: boolean;
 }
 
@@ -151,6 +152,7 @@ export default function DailyPage() {
       setParsedTasks(
         (data.tasks || []).map((t: Omit<ParsedTask, "selected">) => ({
           ...t,
+          deadline: t.deadline || todayStr,
           selected: true,
         }))
       );
@@ -169,7 +171,7 @@ export default function DailyPage() {
         fetch("/api/tasks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: t.name, sprint: t.sprint, estMinutes: t.estMinutes, workCategory: t.workCategory ?? "STANDARD" }),
+          body: JSON.stringify({ name: t.name, sprint: t.sprint, estMinutes: t.estMinutes, workCategory: t.workCategory ?? "STANDARD", deadline: t.deadline || null }),
         })
       )
     );
@@ -577,30 +579,54 @@ export default function DailyPage() {
             </h3>
             <div className="flex gap-2">
               <Button size="sm" variant="ghost" onClick={() => setParsedTasks([])}>Cancel</Button>
-              <Button size="sm" onClick={saveSelectedTasks} disabled={saving}>
+              <Button size="sm" onClick={saveSelectedTasks} disabled={saving || parsedTasks.every((t) => !t.selected)}>
                 {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-                Save selected
+                Add selected
               </Button>
             </div>
           </div>
           <div className="space-y-2">
-            {parsedTasks.map((task, i) => (
-              <label key={i} className="flex items-center gap-3 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={task.selected}
-                  onChange={(e) => {
-                    const next = [...parsedTasks];
-                    next[i] = { ...task, selected: e.target.checked };
-                    setParsedTasks(next);
-                  }}
-                  className="rounded"
-                />
-                <span className="flex-1">{task.name}</span>
-                <SprintBadge sprint={task.sprint} size="sm" />
-                <span className="text-slate-400 dark:text-zinc-500 text-xs">{formatMinutes(task.estMinutes)}</span>
-              </label>
-            ))}
+            {parsedTasks.map((task, i) => {
+              function update(patch: Partial<ParsedTask>) {
+                const next = [...parsedTasks];
+                next[i] = { ...task, ...patch };
+                setParsedTasks(next);
+              }
+              return (
+                <div key={i} className={`rounded-lg border p-3 space-y-2 transition-colors ${task.selected ? "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/50" : "border-transparent opacity-50"}`}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={task.selected}
+                      onChange={(e) => update({ selected: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span className="flex-1 text-sm font-medium">{task.name}</span>
+                    <span className="text-slate-400 dark:text-zinc-500 text-xs shrink-0">{formatMinutes(task.estMinutes)}</span>
+                  </label>
+                  {task.selected && (
+                    <div className="flex items-center gap-2 pl-5">
+                      <Select value={String(task.sprint)} onValueChange={(v) => update({ sprint: parseInt(v) })}>
+                        <SelectTrigger className="h-7 text-xs w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4].map((s) => (
+                            <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="date"
+                        value={task.deadline}
+                        onChange={(e) => update({ deadline: e.target.value })}
+                        className="h-7 text-xs w-36"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
