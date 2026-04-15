@@ -70,6 +70,7 @@ export default function SettingsPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
   const [templateSavedId, setTemplateSavedId] = useState<string | null>(null);
+  const [resetTemplatesConfirm, setResetTemplatesConfirm] = useState(false);
   // Track per-template edited tasks
   const [templateEdits, setTemplateEdits] = useState<Record<string, Record<string, { estMinutes: number; sprint: number; workCategory: string }>>>({});
 
@@ -180,6 +181,14 @@ export default function SettingsPage() {
         },
       },
     }));
+  }
+
+  async function resetTemplates() {
+    await fetch("/api/templates", { method: "DELETE" });
+    setResetTemplatesConfirm(false);
+    setExpandedTemplate(null);
+    setTemplateEdits({});
+    loadAll();
   }
 
   async function saveTemplateTimings(template: Template) {
@@ -390,16 +399,27 @@ export default function SettingsPage() {
 
       {/* ── Template Timings ── */}
       <section className="space-y-4">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="font-medium">Template Task Timings</h2>
             <p className="text-xs text-zinc-500 mt-1">
               Adjust the default timings for each step in your project templates. Changes here affect future projects created from templates.
             </p>
           </div>
-          <Link href="/templates" className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 mt-1 shrink-0">
-            Full editor <ExternalLink className="h-3 w-3" />
-          </Link>
+          <div className="flex items-center gap-3 shrink-0 mt-0.5">
+            {resetTemplatesConfirm ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500">Reset all templates?</span>
+                <button onClick={() => setResetTemplatesConfirm(false)} className="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">Cancel</button>
+                <button onClick={resetTemplates} className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 transition-colors">Yes, reset</button>
+              </div>
+            ) : (
+              <button onClick={() => setResetTemplatesConfirm(true)} className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">Reset to defaults</button>
+            )}
+            <Link href="/templates" className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">
+              Full editor <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
         </div>
 
         <div className="space-y-3">

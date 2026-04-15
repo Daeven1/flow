@@ -47,6 +47,37 @@ export async function GET() {
   return NextResponse.json(templates);
 }
 
+export async function DELETE() {
+  const userId = await getUser();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  await prisma.template.deleteMany({ where: { userId } });
+  for (let i = 0; i < TEMPLATES.length; i++) {
+    const t = TEMPLATES[i];
+    await prisma.template.create({
+      data: {
+        userId,
+        key: t.key,
+        label: t.label,
+        description: t.description,
+        isCustom: false,
+        sortOrder: i,
+        tasks: {
+          create: t.tasks.map((task, j) => ({
+            name: task.name,
+            leadDays: task.leadDays,
+            sprint: task.sprint,
+            estMinutes: task.estMinutes,
+            workCategory: task.workCategory,
+            sortOrder: j,
+          })),
+        },
+      },
+    });
+  }
+  return NextResponse.json({ ok: true });
+}
+
 export async function POST(req: Request) {
   const userId = await getUser();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
