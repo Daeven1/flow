@@ -129,6 +129,8 @@ model WatchItem {
   poster    String?
   checked   Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model ReadItem {
@@ -141,4 +143,6 @@ model ReadItem {
   thumbnail String?
   checked   Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
