@@ -118,3 +118,27 @@ model TemplateTask {
   workCategory String   @default("STANDARD")
   sortOrder    Int      @default(0)
 }
+
+model WatchItem {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  genre     String   @default("")
+  rtScore   Int?
+  year      String   @default("")
+  poster    String?
+  checked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model ReadItem {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  genre     String   @default("")
+  avgRating Float?
+  authors   String   @default("")
+  thumbnail String?
+  checked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
