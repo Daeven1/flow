@@ -14,6 +14,7 @@ import {
   Settings,
   LayoutTemplate,
   Crosshair,
+  Bookmark,
   Sun,
   Moon,
   LogOut,
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { href: "/time", label: "Time", icon: Clock },
   { href: "/review", label: "Review", icon: BarChart2 },
   { href: "/templates", label: "Templates", icon: LayoutTemplate },
+  { href: "/lists", label: "Lists", icon: Bookmark },
 ];
 
 export function Nav() {
