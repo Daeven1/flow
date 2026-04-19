@@ -103,6 +103,11 @@ function computeStreak(tasks: Task[]): number {
   return streak;
 }
 
+function extractUrls(text: string): string[] {
+  const urlRegex = /https?:\/\/[^\s,)"']+/g;
+  return Array.from(new Set(text.match(urlRegex) ?? []));
+}
+
 export default function DailyPage() {
   const todayStr = format(startOfDay(new Date()), "yyyy-MM-dd");
 
@@ -119,6 +124,7 @@ export default function DailyPage() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showWeekGain, setShowWeekGain] = useState(false);
+  const [enrichedLinks, setEnrichedLinks] = useState<{ url: string; title: string | null }[]>([]);
 
   const loadData = useCallback(async () => {
     const [logRes, tasksRes, projectsRes] = await Promise.all([
@@ -192,6 +198,26 @@ export default function DailyPage() {
     setSaving(false);
     loadData();
   }
+
+  useEffect(() => {
+    if (parsedTasks.length === 0) { setEnrichedLinks([]); return; }
+    const urls = extractUrls(log.brainDump);
+    if (urls.length === 0) { setEnrichedLinks([]); return; }
+
+    setEnrichedLinks(urls.map((url) => ({ url, title: null })));
+
+    urls.forEach(async (url) => {
+      try {
+        const res = await fetch(`/api/fetch-title?url=${encodeURIComponent(url)}`);
+        const { title } = await res.json();
+        setEnrichedLinks((prev) =>
+          prev.map((l) => (l.url === url ? { url, title } : l))
+        );
+      } catch {
+        // title stays null — bare URL shown as fallback
+      }
+    });
+  }, [parsedTasks.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function toggleTask(id: string, done: boolean) {
     await fetch(`/api/tasks/${id}`, {
@@ -603,6 +629,24 @@ export default function DailyPage() {
             <h3 className="font-medium text-sm">
               AI found {parsedTasks.length} task{parsedTasks.length !== 1 ? "s" : ""}
             </h3>
+            {enrichedLinks.length > 0 && (
+              <div className="rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-100 dark:border-blue-900 px-3 py-2">
+                <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">Links detected</p>
+                <div className="space-y-1">
+                  {enrichedLinks.map(({ url, title }) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-xs text-blue-600 dark:text-blue-400 hover:underline truncate"
+                    >
+                      {title ?? url}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex gap-2">
               <Button size="sm" variant="ghost" onClick={() => setParsedTasks([])}>Cancel</Button>
               <Button size="sm" onClick={saveSelectedTasks} disabled={saving || parsedTasks.every((t) => !t.selected)}>
