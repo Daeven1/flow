@@ -34,14 +34,16 @@ export function WatchList() {
 
   useEffect(() => {
     fetch("/api/lists/watch")
-      .then((r) => r.json())
-      .then(setItems);
+      .then((r) => { if (!r.ok) return []; return r.json(); })
+      .then(setItems)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!query.trim()) { setResults([]); return; }
     debounceRef.current = setTimeout(async () => {
+      if (!OMDB_KEY) { setSearching(false); return; }
       setSearching(true);
       try {
         const res = await fetch(
@@ -55,6 +57,9 @@ export function WatchList() {
         setSearching(false);
       }
     }, 350);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [query]);
 
   // Close dropdown on outside click
@@ -79,7 +84,7 @@ export function WatchList() {
       const rtRating = detail.Ratings?.find(
         (r: { Source: string; Value: string }) => r.Source === "Rotten Tomatoes"
       );
-      const rtScore = rtRating ? parseInt(rtRating.Value) : null;
+      const rtScore = rtRating ? parseInt(rtRating.Value, 10) : null;
 
       const res = await fetch("/api/lists/watch", {
         method: "POST",
@@ -88,12 +93,14 @@ export function WatchList() {
           title: result.Title,
           year: result.Year,
           genre: detail.Genre ?? "",
-          rtScore: isNaN(rtScore as number) ? null : rtScore,
+          rtScore: typeof rtScore === "number" && !isNaN(rtScore) ? rtScore : null,
           poster: result.Poster !== "N/A" ? result.Poster : null,
         }),
       });
-      const item = await res.json();
-      setItems((prev) => [...prev, item]);
+      if (res.ok) {
+        const item = await res.json();
+        setItems((prev) => [...prev, item]);
+      }
     } finally {
       setAdding(null);
     }
@@ -102,11 +109,16 @@ export function WatchList() {
   async function toggleChecked(item: WatchItem) {
     const updated = { ...item, checked: !item.checked };
     setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
-    await fetch(`/api/lists/watch/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ checked: updated.checked }),
-    });
+    try {
+      const res = await fetch(`/api/lists/watch/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checked: updated.checked }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setItems((prev) => prev.map((i) => (i.id === item.id ? item : i)));
+    }
   }
 
   async function deleteItem(id: string) {
@@ -157,6 +169,11 @@ export function WatchList() {
                 </div>
               </button>
             ))}
+          </div>
+        )}
+        {results.length === 0 && !searching && query.trim() && (
+          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-lg px-3 py-2 text-sm text-slate-400 dark:text-zinc-500">
+            No results found
           </div>
         )}
       </div>
@@ -230,7 +247,7 @@ function WatchItemRow({
       </div>
       <button
         onClick={() => onDelete(item.id)}
-        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 dark:text-zinc-600 hover:text-red-400 transition-colors"
+        className="shrink-0 opacity-0 group-hover:opacity-100 transition-all text-slate-300 dark:text-zinc-600 hover:text-red-400"
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
