@@ -26,6 +26,9 @@ const DEFAULT_PRESETS = [
   { name: "Write Professional Article / Blog",sprint: 4, estMinutes: 120, workCategory: "STANDARD", notes: "" },
   { name: "Create Instructional Video",       sprint: 4, estMinutes: 90,  workCategory: "STANDARD", notes: "" },
   { name: "Practice/Learn Design Software",   sprint: 4, estMinutes: 60,  workCategory: "STANDARD", notes: "" },
+  { name: "Reimbursement Submission",         sprint: 3, estMinutes: 15,  workCategory: "STANDARD", notes: "" },
+  { name: "SST Tracking",                     sprint: 3, estMinutes: 20,  workCategory: "STANDARD", notes: "" },
+  { name: "Monthly Budget Check-In",          sprint: 3, estMinutes: 20,  workCategory: "STANDARD", notes: "" },
 ];
 
 async function seedPresetsIfEmpty(userId: string) {

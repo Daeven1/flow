@@ -256,11 +256,11 @@ export default function DailyPage() {
   const weekTaskCount = doneToday.length + doneThisWeek.length;
   const streak = computeStreak(tasks);
 
-  // ⚡ Auto-escalated: deadline <= tomorrow, from ANY sprint
+  // ⚡ Auto-escalated: deadline is today, from ANY sprint
   const urgentNow = openTasks.filter((t) => {
     if (!t.deadline) return false;
     const dl = startOfDay(parseISO(t.deadline));
-    return dl <= tomorrow;
+    return dl <= today;
   });
   const urgentIds = new Set(urgentNow.map((t) => t.id));
 
