@@ -17,6 +17,7 @@ export async function PATCH(
   const body = await req.json();
   const data: Record<string, unknown> = {};
 
+  if ("pinned" in body) data.pinned = Boolean(body.pinned);
   if ("done" in body) {
     data.done = body.done;
     data.doneAt = body.done ? new Date() : null;
@@ -27,6 +28,7 @@ export async function PATCH(
   if ("actualMinutes" in body)
     data.actualMinutes = body.actualMinutes ? Number(body.actualMinutes) : null;
   if ("workCategory" in body) data.workCategory = body.workCategory;
+  if ("leadDays" in body) data.leadDays = Number(body.leadDays);
 
   if ("deadline" in body) {
     data.deadline = body.deadline ? new Date(body.deadline) : null;

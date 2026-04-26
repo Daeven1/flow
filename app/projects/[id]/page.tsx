@@ -103,16 +103,33 @@ export default function ProjectDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    return () => {
+      if (notesTimer.current) clearTimeout(notesTimer.current);
+    };
+  }, []);
+
+  const reloadTasks = useCallback(async () => {
+    const res = await fetch(`/api/projects/${id}`);
+    if (!res.ok) return;
+    const proj: Project = await res.json();
+    setProject(proj);
+  }, [id]);
+
   async function saveName() {
     if (!project) return;
     setEditingName(false);
     if (nameValue === project.name) return;
-    await fetch(`/api/projects/${id}`, {
+    const res = await fetch(`/api/projects/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: nameValue }),
     });
-    setProject((p) => p ? { ...p, name: nameValue } : p);
+    if (res.ok) {
+      setProject((p) => p ? { ...p, name: nameValue } : p);
+    } else {
+      setNameValue(project.name);
+    }
   }
 
   async function saveDeadline() {
@@ -121,12 +138,16 @@ export default function ProjectDetailPage() {
     const newDeadline = deadlineValue || null;
     const current = project.deadline ? project.deadline.slice(0, 10) : null;
     if (newDeadline === current) return;
-    await fetch(`/api/projects/${id}`, {
+    const res = await fetch(`/api/projects/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ deadline: newDeadline }),
     });
-    setProject((p) => p ? { ...p, deadline: newDeadline } : p);
+    if (res.ok) {
+      setProject((p) => p ? { ...p, deadline: newDeadline } : p);
+    } else {
+      setDeadlineValue(project.deadline ? project.deadline.slice(0, 10) : "");
+    }
   }
 
   function handleNotesChange(value: string) {
@@ -159,7 +180,7 @@ export default function ProjectDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ done }),
     });
-    load();
+    reloadTasks();
   }
 
   function startEditTask(task: Task) {
@@ -188,12 +209,12 @@ export default function ProjectDetailPage() {
       }),
     });
     setEditingTaskId(null);
-    load();
+    reloadTasks();
   }
 
   async function deleteTask(taskId: string) {
     await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
-    load();
+    reloadTasks();
   }
 
   function applyPreset(presetId: string) {
@@ -213,8 +234,8 @@ export default function ProjectDetailPage() {
       body: JSON.stringify({
         projectId: id,
         name: newTaskName,
-        sprint: newTaskSprint,
-        estMinutes: newTaskEst,
+        sprint: parseInt(newTaskSprint),
+        estMinutes: parseInt(newTaskEst),
         deadline: newTaskDeadline || null,
         workCategory: newTaskCategory,
         leadDays: parseInt(newTaskLeadDays),
@@ -222,7 +243,7 @@ export default function ProjectDetailPage() {
     });
     setNewTaskName(""); setNewTaskDeadline(""); setNewTaskLeadDays("0");
     setAddingTask(false);
-    load();
+    reloadTasks();
   }
 
   if (loading) {
