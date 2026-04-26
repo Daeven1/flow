@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SprintBadge } from "@/components/SprintBadge";
@@ -12,6 +14,7 @@ import { formatMinutes, SPRINT_LABELS, formatRelativeDate } from "@/lib/utils";
 import {
   Plus, Trash2, ChevronDown, ChevronRight, CheckCircle2, Circle,
   Pencil, Check, X, BookmarkPlus, Moon, CalendarClock, Wand2,
+  GripVertical, ArrowUpRight,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -218,10 +221,33 @@ export default function ProjectsPage() {
     });
   }
 
+  async function handleDragEnd(result: DropResult) {
+    if (!result.destination) return;
+    if (result.destination.index === result.source.index) return;
+
+    const reordered = Array.from(projects);
+    const [removed] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, removed);
+    setProjects(reordered);
+
+    await Promise.all(
+      reordered.map((p, i) =>
+        fetch(`/api/projects/${p.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sortOrder: i }),
+        })
+      )
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Projects</h1>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Projects</h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Multi-step goals with their own task lists, deadlines, and progress tracking.</p>
+        </div>
         <Button size="sm" onClick={() => setShowForm(!showForm)}>
           <Plus className="h-3.5 w-3.5 mr-1.5" />New project
         </Button>
@@ -288,8 +314,15 @@ export default function ProjectsPage() {
       {projects.length === 0 ? (
         <div className="text-center py-12 text-zinc-400 text-sm">No projects yet. Create one above.</div>
       ) : (
-        <div className="space-y-3">
-          {projects.map((project) => {
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="projects">
+            {(droppableProvided) => (
+              <div
+                className="space-y-3"
+                ref={droppableProvided.innerRef}
+                {...droppableProvided.droppableProps}
+              >
+                {projects.map((project, index) => {
             const donePct = project.tasks.length > 0
               ? Math.round((project.tasks.filter((t) => t.done).length / project.tasks.length) * 100)
               : 0;
@@ -301,11 +334,25 @@ export default function ProjectsPage() {
               return parseISO(a.deadline).getTime() - parseISO(b.deadline).getTime();
             });
 
-            return (
-              <div key={project.id} className="rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
-                {/* Project header */}
-                <div className="flex items-center gap-3 p-4">
-                  <button onClick={() => toggleExpand(project.id)} className="text-zinc-400">
+                return (
+                  <Draggable key={project.id} draggableId={project.id} index={index}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        className={`rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 ${
+                          snapshot.isDragging ? "shadow-lg" : ""
+                        }`}
+                      >
+                        {/* Project header */}
+                        <div className="flex items-center gap-3 p-4">
+                          <div
+                            {...provided.dragHandleProps}
+                            className="text-zinc-300 hover:text-zinc-500 cursor-grab active:cursor-grabbing shrink-0"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </div>
+                          <button onClick={() => toggleExpand(project.id)} className="text-zinc-400">
                     {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </button>
                   <div className="flex-1 min-w-0">
@@ -332,6 +379,13 @@ export default function ProjectsPage() {
                     </div>
                   </div>
                   {/* Save as template */}
+                  <Link
+                    href={`/projects/${project.id}`}
+                    className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                    title="Open project"
+                  >
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Link>
                   <button
                     onClick={() => { setSavingTemplate(project.id); setTemplateName(project.name); setTemplateDesc(""); }}
                     className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 transition-colors"
@@ -552,10 +606,16 @@ export default function ProjectsPage() {
                     )}
                   </div>
                 )}
-              </div>
-            );
-          })}
-        </div>
+                      </div>
+                    )}
+                  </Draggable>
+                );
+              })}
+              {droppableProvided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
       )}
     </div>
   );
