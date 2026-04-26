@@ -14,6 +14,8 @@ model Project {
   name        String
   deadline    DateTime?
   templateKey String?
+  notes       String    @default("")
+  sortOrder   Int       @default(0)
   createdAt   DateTime  @default(now())
   tasks       Task[]
 }
@@ -31,6 +33,7 @@ model Task {
   sprint        Int
   estMinutes    Int       @default(30)
   actualMinutes Int?
+  pinned        Boolean   @default(false)
   done          Boolean   @default(false)
   doneAt        DateTime?
   createdAt     DateTime  @default(now())
