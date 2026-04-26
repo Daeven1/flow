@@ -26,9 +26,7 @@ import {
   ChevronDown,
   ChevronUp,
   Trophy,
-  FolderOpen,
 } from "lucide-react";
-import { ProjectRow } from "@/components/ProjectRow";
 import {
   formatMinutes,
   formatRelativeDate,
@@ -48,13 +46,6 @@ interface Task {
   scheduledDate: string | null;
   workCategory: string;
   project: { id: string; name: string } | null;
-}
-
-interface Project {
-  id: string;
-  name: string;
-  deadline: string | null;
-  tasks: { done: boolean }[];
 }
 
 interface DailyLog {
@@ -119,25 +110,23 @@ export default function DailyPage() {
     brainDump: "",
   });
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [parsedTasks, setParsedTasks] = useState<ParsedTask[]>([]);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showWeekGain, setShowWeekGain] = useState(false);
   const [enrichedLinks, setEnrichedLinks] = useState<{ url: string; title: string | null }[]>([]);
+  const [gainInput, setGainInput] = useState("");
+  const [addingToGain, setAddingToGain] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [logRes, tasksRes, projectsRes] = await Promise.all([
+    const [logRes, tasksRes] = await Promise.all([
       fetch(`/api/daily?date=${todayStr}`),
       fetch("/api/tasks"),
-      fetch("/api/projects"),
     ]);
     const logData = await logRes.json();
     const tasksData = await tasksRes.json();
-    const projectsData = await projectsRes.json();
     if (logData) setLog(logData);
     setTasks(tasksData);
-    setProjects(projectsData);
   }, [todayStr]);
 
   useEffect(() => {
@@ -220,12 +209,34 @@ export default function DailyPage() {
   }, [parsedTasks.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function toggleTask(id: string, done: boolean) {
+    const now = new Date().toISOString();
+    setTasks((prev) =>
+      prev.map((t) => t.id === id ? { ...t, done, doneAt: done ? now : null } : t)
+    );
     await fetch(`/api/tasks/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ done }),
     });
     loadData();
+  }
+
+  async function addToGain(e: React.FormEvent) {
+    e.preventDefault();
+    if (!gainInput.trim() || addingToGain) return;
+    setAddingToGain(true);
+    const name = gainInput.trim();
+    setGainInput("");
+    try {
+      await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, sprint: 1, estMinutes: 30, workCategory: "STANDARD", done: true }),
+      });
+      loadData();
+    } finally {
+      setAddingToGain(false);
+    }
   }
 
   // ── Date anchors ──
@@ -308,9 +319,12 @@ export default function DailyPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-        {format(new Date(), "EEEE, d MMMM")}
-      </h1>
+      <div>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+          {format(new Date(), "EEEE, d MMMM")}
+        </h1>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Your command centre for today — what&apos;s due, what&apos;s done, and what&apos;s coming up.</p>
+      </div>
 
       {/* ── Stats row ── */}
       <div className="grid grid-cols-4 gap-3">
@@ -384,6 +398,23 @@ export default function DailyPage() {
           )}
         </div>
 
+        {/* Quick add to gain */}
+        <form onSubmit={addToGain} className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+          <Plus className="h-4 w-4 text-slate-300 dark:text-zinc-600 shrink-0" />
+          <input
+            type="text"
+            placeholder="Log something you just did…"
+            value={gainInput}
+            onChange={(e) => setGainInput(e.target.value)}
+            className="flex-1 text-sm bg-transparent outline-none placeholder:text-slate-300 dark:placeholder:text-zinc-600 text-slate-700 dark:text-zinc-300"
+          />
+          {gainInput.trim() && (
+            <button type="submit" disabled={addingToGain} className="text-xs text-green-600 dark:text-green-400 font-medium shrink-0 disabled:opacity-50">
+              {addingToGain ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+            </button>
+          )}
+        </form>
+
         {/* This week (collapsible) */}
         {doneThisWeek.length > 0 && (
           <div className="border-t border-slate-100 dark:border-zinc-800">
@@ -413,19 +444,6 @@ export default function DailyPage() {
         )}
       </div>
 
-      {/* ── Projects ── */}
-      {projects.length > 0 && (
-        <div className="rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800">
-            <FolderOpen className="h-3.5 w-3.5 text-indigo-400" />
-            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Projects</span>
-          </div>
-          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {projects.map((p) => <ProjectRow key={p.id} project={p} />)}
-          </div>
-        </div>
-      )}
-
       {/* ── ⚡ AUTO-ESCALATED: Due very soon ── */}
       {urgentNow.length > 0 && (
         <div className="rounded border-2 border-red-300 dark:border-red-800 overflow-hidden">
@@ -441,7 +459,7 @@ export default function DailyPage() {
               const dl = task.deadline ? startOfDay(parseISO(task.deadline)) : null;
               const daysLeft = dl ? differenceInCalendarDays(dl, today) : null;
               return (
-                <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-zinc-950">
+                <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-zinc-950" style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}` }}>
                   <button onClick={() => toggleTask(task.id, true)}>
                     <Circle className="h-4 w-4 text-red-300 hover:text-green-500 transition-colors" />
                   </button>
@@ -493,7 +511,7 @@ export default function DailyPage() {
                   </div>
                   <div className="divide-y divide-slate-100 dark:divide-zinc-800">
                     {sprintTasks.map((task) => (
-                      <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <div key={task.id} className="flex items-center gap-3 px-4 py-2.5" style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}` }}>
                         <button onClick={() => toggleTask(task.id, true)}>
                           <Circle className="h-4 w-4 text-slate-300 dark:text-zinc-600 hover:text-green-500 transition-colors" />
                         </button>
@@ -710,7 +728,7 @@ export default function DailyPage() {
           </h2>
           <div className="divide-y divide-slate-100 dark:divide-zinc-800">
             {upcoming.map((task) => (
-              <div key={task.id} className="flex items-center gap-3 py-2 text-slate-500 dark:text-zinc-400">
+              <div key={task.id} className="flex items-center gap-3 py-2 pl-3 text-slate-500 dark:text-zinc-400" style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}` }}>
                 <span className="w-20 text-xs font-medium text-slate-400 dark:text-zinc-500 shrink-0">
                   {formatRelativeDate(task.scheduledDate)}
                 </span>

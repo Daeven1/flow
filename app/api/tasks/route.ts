@@ -55,6 +55,7 @@ export async function POST(req: Request) {
       workCategory: workCategory ?? "STANDARD",
       sprint: Number(sprint),
       estMinutes: Number(estMinutes) || 30,
+      ...(body.done ? { done: true, doneAt: new Date() } : {}),
     },
     include: { project: true },
   });

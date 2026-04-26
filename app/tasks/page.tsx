@@ -12,9 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SPRINT_LABELS, formatMinutes, formatRelativeDate, urgencySort } from "@/lib/utils";
-import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, FolderOpen } from "lucide-react";
-import { ProjectRow } from "@/components/ProjectRow";
+import { SPRINT_LABELS, SPRINT_COLORS, formatMinutes, formatRelativeDate, urgencySort } from "@/lib/utils";
+import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, Star } from "lucide-react";
 import { parseISO, startOfDay } from "date-fns";
 
 type FilterMode = "all" | "1" | "2" | "3" | "4" | "done";
@@ -33,22 +32,15 @@ interface Task {
   sprint: number;
   estMinutes: number;
   done: boolean;
+  pinned: boolean;
   deadline: string | null;
   scheduledDate: string | null;
   workCategory: string;
   project: { id: string; name: string } | null;
 }
 
-interface Project {
-  id: string;
-  name: string;
-  deadline: string | null;
-  tasks: { done: boolean }[];
-}
-
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [filter, setFilter] = useState<FilterMode>("all");
   const [presets, setPresets] = useState<Preset[]>([]);
 
@@ -70,14 +62,12 @@ export default function TasksPage() {
   const [editCategory, setEditCategory] = useState("STANDARD");
 
   const load = useCallback(async () => {
-    const [tasksRes, presetsRes, projectsRes] = await Promise.all([
+    const [tasksRes, presetsRes] = await Promise.all([
       fetch("/api/tasks"),
       fetch("/api/presets"),
-      fetch("/api/projects"),
     ]);
     setTasks(await tasksRes.json());
     setPresets(await presetsRes.json());
-    setProjects(await projectsRes.json());
   }, []);
 
   useEffect(() => {
@@ -124,6 +114,15 @@ export default function TasksPage() {
   async function deleteTask(id: string) {
     await fetch(`/api/tasks/${id}`, { method: "DELETE" });
     load();
+  }
+
+  async function togglePin(id: string, pinned: boolean) {
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, pinned } : t));
+    await fetch(`/api/tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned }),
+    });
   }
 
   function startEdit(task: Task) {
@@ -175,7 +174,10 @@ export default function TasksPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Tasks</h1>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Tasks</h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Your full task backlog — add, filter by sprint, and manage everything in one place.</p>
+        </div>
         <Button size="sm" onClick={() => setShowForm(!showForm)}>
           <Plus className="h-3.5 w-3.5 mr-1.5" />
           Add task
@@ -242,19 +244,6 @@ export default function TasksPage() {
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
             <Button size="sm" onClick={addTask} disabled={!newName.trim()}>Add task</Button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Projects ── */}
-      {projects.length > 0 && filter === "all" && (
-        <div className="rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800">
-            <FolderOpen className="h-3.5 w-3.5 text-indigo-400" />
-            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Projects</span>
-          </div>
-          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {projects.map((p) => <ProjectRow key={p.id} project={p} />)}
           </div>
         </div>
       )}
@@ -358,7 +347,7 @@ export default function TasksPage() {
               </div>
             ) : (
               /* ── Normal view ── */
-              <div key={task.id} className={`flex items-center gap-3 py-3 group ${task.done ? "opacity-50" : ""}`}>
+              <div key={task.id} className={`flex items-center gap-3 py-3 pl-3 group ${task.done ? "opacity-50" : ""}`} style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}` }}>
                 <button onClick={() => toggleTask(task.id, !task.done)}>
                   {task.done ? (
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -366,6 +355,15 @@ export default function TasksPage() {
                     <Circle className="h-4 w-4 text-zinc-300 hover:text-green-500 transition-colors" />
                   )}
                 </button>
+                {!task.done && (
+                  <button
+                    onClick={() => togglePin(task.id, !task.pinned)}
+                    className="shrink-0"
+                    title={task.pinned ? "Unpin task" : "Pin to top"}
+                  >
+                    <Star className={`h-3.5 w-3.5 transition-colors ${task.pinned ? "fill-amber-400 text-amber-400" : "text-zinc-200 dark:text-zinc-700 hover:text-amber-400"}`} />
+                  </button>
+                )}
 
                 <div className="flex-1 min-w-0">
                   <span className={`text-sm ${task.done ? "line-through" : ""}`}>{task.name}</span>

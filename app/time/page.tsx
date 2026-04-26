@@ -86,7 +86,10 @@ export default function TimePage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Time Logging</h1>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Time Logging</h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Log actual time spent on tasks and compare against your estimates.</p>
+        </div>
         <div className="text-xs text-zinc-400 flex items-center gap-1">
           <Clock className="h-3.5 w-3.5" />
           Advanced mode

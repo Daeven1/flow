@@ -97,7 +97,10 @@ export default function ReviewPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Weekly Review</h1>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Weekly Review</h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Reflect on the week — what you completed, time spent, and patterns across sprints.</p>
+        </div>
         <span className="text-sm text-zinc-400">
           Week of {format(weekStart, "d MMM yyyy")}
         </span>

@@ -20,8 +20,7 @@ import {
   formatRelativeDate,
   urgencySort,
 } from "@/lib/utils";
-import { CheckCircle2, Circle, Pencil, Check, X, Moon, CalendarClock, Zap, FolderOpen } from "lucide-react";
-import { ProjectRow } from "@/components/ProjectRow";
+import { CheckCircle2, Circle, Pencil, Check, X, Moon, CalendarClock, Zap, Star } from "lucide-react";
 import { parseISO, compareAsc, startOfDay, addDays, differenceInCalendarDays } from "date-fns";
 
 interface Task {
@@ -30,24 +29,17 @@ interface Task {
   sprint: number;
   estMinutes: number;
   done: boolean;
+  pinned: boolean;
   deadline: string | null;
   scheduledDate: string | null;
   workCategory: string;
   project: { id: string; name: string } | null;
 }
 
-interface Project {
-  id: string;
-  name: string;
-  deadline: string | null;
-  tasks: { done: boolean }[];
-}
-
 type SortMode = "scheduled" | "deadline";
 
 export default function SprintsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>("scheduled");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -58,12 +50,7 @@ export default function SprintsPage() {
   const [editCategory, setEditCategory] = useState("STANDARD");
 
   const load = useCallback(async () => {
-    const [tasksRes, projectsRes] = await Promise.all([
-      fetch("/api/tasks"),
-      fetch("/api/projects"),
-    ]);
-    setTasks(await tasksRes.json());
-    setProjects(await projectsRes.json());
+    setTasks(await fetch("/api/tasks").then((r) => r.json()));
   }, []);
 
   useEffect(() => {
@@ -77,6 +64,15 @@ export default function SprintsPage() {
       body: JSON.stringify({ done }),
     });
     load();
+  }
+
+  async function togglePin(id: string, pinned: boolean) {
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, pinned } : t));
+    await fetch(`/api/tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned }),
+    });
   }
 
   function startEdit(task: Task) {
@@ -107,16 +103,22 @@ export default function SprintsPage() {
   }
 
   function sortTasks(taskList: Task[]) {
+    const pinnedFirst = (a: Task, b: Task) => Number(b.pinned) - Number(a.pinned);
     if (sortMode === "deadline") {
       return [...taskList].sort((a, b) => {
+        const pin = pinnedFirst(a, b);
+        if (pin !== 0) return pin;
         if (!a.deadline && !b.deadline) return 0;
         if (!a.deadline) return 1;
         if (!b.deadline) return -1;
         return compareAsc(parseISO(a.deadline), parseISO(b.deadline));
       });
     }
-    // Default: sort by scheduledDate (soonest first), then by deadline urgency
-    return [...taskList].sort(urgencySort);
+    return [...taskList].sort((a, b) => {
+      const pin = pinnedFirst(a, b);
+      if (pin !== 0) return pin;
+      return urgencySort(a, b);
+    });
   }
 
   const today = startOfDay(new Date());
@@ -133,7 +135,10 @@ export default function SprintsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Sprints</h1>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Sprints</h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">All open tasks organised by sprint — manage workload and capacity across S1–S4.</p>
+        </div>
         <div className="flex items-center gap-1 text-xs">
           <span className="text-zinc-400 mr-1">Sort:</span>
           {(["scheduled", "deadline"] as SortMode[]).map((mode) => (
@@ -152,19 +157,6 @@ export default function SprintsPage() {
         </div>
       </div>
 
-      {/* ── Projects ── */}
-      {projects.length > 0 && (
-        <div className="rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800">
-            <FolderOpen className="h-3.5 w-3.5 text-indigo-400" />
-            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Projects</span>
-          </div>
-          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {projects.map((p) => <ProjectRow key={p.id} project={p} />)}
-          </div>
-        </div>
-      )}
-
       {/* ⚡ Auto-escalated urgent tasks */}
       {urgentNow.length > 0 && (
         <div className="rounded border-2 border-red-300 dark:border-red-800 overflow-hidden">
@@ -178,7 +170,7 @@ export default function SprintsPage() {
               const dl = task.deadline ? startOfDay(parseISO(task.deadline)) : null;
               const daysLeft = dl ? differenceInCalendarDays(dl, today) : null;
               return (
-                <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-zinc-900 group">
+                <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-zinc-900 group" style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}` }}>
                   <button onClick={() => toggleTask(task.id, true)}>
                     <Circle className="h-4 w-4 text-red-300 hover:text-green-500 transition-colors" />
                   </button>
@@ -322,9 +314,16 @@ export default function SprintsPage() {
                       </div>
                     ) : (
                       /* ── Normal view ── */
-                      <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 group">
+                      <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 group" style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}` }}>
                         <button onClick={() => toggleTask(task.id, true)}>
                           <Circle className="h-4 w-4 text-zinc-300 hover:text-green-500 transition-colors" />
+                        </button>
+                        <button
+                          onClick={() => togglePin(task.id, !task.pinned)}
+                          className="shrink-0"
+                          title={task.pinned ? "Unpin task" : "Pin to top"}
+                        >
+                          <Star className={`h-3.5 w-3.5 transition-colors ${task.pinned ? "fill-amber-400 text-amber-400" : "text-zinc-200 dark:text-zinc-700 hover:text-amber-400"}`} />
                         </button>
                         <span className="flex-1 text-sm">{task.name}</span>
 

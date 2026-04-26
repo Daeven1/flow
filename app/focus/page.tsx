@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { StickyPile } from "@/components/StickyPile";
+import { SprintBadge } from "@/components/SprintBadge";
+import { SPRINT_COLORS } from "@/lib/utils";
 
 type Task = {
   id: string;
@@ -110,7 +112,8 @@ export default function FocusPage() {
                 {tasks.map((task) => (
                   <label
                     key={task.id}
-                    className="flex items-center gap-3 py-2.5 cursor-pointer group"
+                    className="flex items-center gap-3 py-2.5 pl-3 cursor-pointer group"
+                    style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}` }}
                   >
                     <input
                       type="checkbox"
@@ -121,9 +124,7 @@ export default function FocusPage() {
                     <span className="flex-1 text-sm text-slate-800 dark:text-zinc-200">
                       {task.name}
                     </span>
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900">
-                      S{task.sprint}
-                    </span>
+                    <SprintBadge sprint={task.sprint} size="sm" />
                     <span className="text-xs text-slate-400 dark:text-zinc-500 w-10 text-right">
                       {task.estMinutes}m
                     </span>
