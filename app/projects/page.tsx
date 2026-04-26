@@ -225,20 +225,25 @@ export default function ProjectsPage() {
     if (!result.destination) return;
     if (result.destination.index === result.source.index) return;
 
+    const previous = projects;
     const reordered = Array.from(projects);
     const [removed] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, removed);
     setProjects(reordered);
 
-    await Promise.all(
-      reordered.map((p, i) =>
-        fetch(`/api/projects/${p.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sortOrder: i }),
-        })
-      )
-    );
+    try {
+      await Promise.all(
+        reordered.map((p, i) =>
+          fetch(`/api/projects/${p.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sortOrder: i }),
+          })
+        )
+      );
+    } catch {
+      setProjects(previous);
+    }
   }
 
   return (
@@ -378,7 +383,6 @@ export default function ProjectsPage() {
                       </span>
                     </div>
                   </div>
-                  {/* Save as template */}
                   <Link
                     href={`/projects/${project.id}`}
                     className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
