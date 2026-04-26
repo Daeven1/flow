@@ -33,10 +33,10 @@ export async function PATCH(
   const { name, deadline, notes, sortOrder } = body;
 
   const data: Record<string, unknown> = {};
-  if (name !== undefined) data.name = name;
-  if (deadline !== undefined) data.deadline = deadline ? new Date(deadline) : null;
-  if (notes !== undefined) data.notes = notes;
-  if (sortOrder !== undefined) data.sortOrder = sortOrder;
+  if ("name" in body) data.name = name;
+  if ("deadline" in body) data.deadline = deadline ? new Date(deadline) : null;
+  if ("notes" in body) data.notes = notes;
+  if ("sortOrder" in body) data.sortOrder = Number(sortOrder);
 
   const project = await prisma.project.update({
     where: { id, userId },
