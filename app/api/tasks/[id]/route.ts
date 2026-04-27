@@ -11,6 +11,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // fallback to API key auth for iOS Shortcuts reminderId write-back
   const userId = (await getUser()) ?? validateApiKey(req);
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
