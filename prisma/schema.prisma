@@ -16,6 +16,7 @@ model Project {
   templateKey String?
   notes       String    @default("")
   sortOrder   Int       @default(0)
+  active      Boolean   @default(false)
   createdAt   DateTime  @default(now())
   tasks       Task[]
 }
