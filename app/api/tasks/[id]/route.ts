@@ -5,12 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { computeScheduledDate } from "@/lib/utils";
 import { getUser } from "@/lib/auth";
 import { getWorkNightDays } from "@/lib/workNightDays";
+import { validateApiKey } from "@/lib/remindersAuth";
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const userId = await getUser();
+  const userId = (await getUser()) ?? validateApiKey(req);
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
@@ -29,6 +30,7 @@ export async function PATCH(
     data.actualMinutes = body.actualMinutes ? Number(body.actualMinutes) : null;
   if ("workCategory" in body) data.workCategory = body.workCategory;
   if ("leadDays" in body) data.leadDays = Number(body.leadDays);
+  if ("reminderId" in body) data.reminderId = body.reminderId ?? null;
 
   if ("deadline" in body) {
     data.deadline = body.deadline ? new Date(body.deadline) : null;
