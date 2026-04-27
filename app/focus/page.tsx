@@ -27,7 +27,8 @@ export default function FocusPage() {
       .then((data: Task[]) => {
         setTasks(data.filter((t) => !t.done));
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   function toggle(id: string) {
@@ -47,17 +48,21 @@ export default function FocusPage() {
   }
 
   function startSession() {
-    const pile = queue.map((id) => tasks.find((t) => t.id === id)!).filter(Boolean);
+    const pile = queue
+      .map((id) => tasks.find((t) => t.id === id))
+      .filter((t): t is Task => t !== undefined);
     setSession(pile);
   }
 
   async function completeTask(taskId: string) {
-    await fetch(`/api/tasks/${taskId}`, {
+    const res = await fetch(`/api/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ done: true }),
     });
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    if (res.ok) {
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    }
   }
 
   function resetSession() {
@@ -73,7 +78,9 @@ export default function FocusPage() {
     );
   }
 
-  const queuedTasks = queue.map((id) => tasks.find((t) => t.id === id)!).filter(Boolean);
+  const queuedTasks = queue
+    .map((id) => tasks.find((t) => t.id === id))
+    .filter((t): t is Task => t !== undefined);
 
   return (
     <div className="space-y-6">
@@ -184,6 +191,7 @@ export default function FocusPage() {
                             >
                               <span
                                 {...provided.dragHandleProps}
+                                aria-label="Drag to reorder"
                                 className="text-slate-300 dark:text-zinc-600 hover:text-slate-500 dark:hover:text-zinc-400 cursor-grab"
                               >
                                 <GripVertical className="h-4 w-4" />
@@ -200,6 +208,7 @@ export default function FocusPage() {
                               </span>
                               <button
                                 onClick={() => toggle(task.id)}
+                                aria-label="Remove from pile"
                                 className="text-slate-300 dark:text-zinc-600 hover:text-rose-400 dark:hover:text-rose-400 shrink-0 ml-1 leading-none"
                                 title="Remove from pile"
                               >
