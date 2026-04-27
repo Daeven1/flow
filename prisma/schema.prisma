@@ -41,6 +41,8 @@ model Task {
   syncedFrom    String    @default("app")
   createdAt     DateTime  @default(now())
   timeLogs      TimeLog[]
+
+  @@unique([userId, reminderId])
 }
 
 model DailyLog {
