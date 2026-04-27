@@ -37,6 +37,8 @@ model Task {
   pinned        Boolean   @default(false)
   done          Boolean   @default(false)
   doneAt        DateTime?
+  reminderId    String?
+  syncedFrom    String    @default("app")
   createdAt     DateTime  @default(now())
   timeLogs      TimeLog[]
 }
