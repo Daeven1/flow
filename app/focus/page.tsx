@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import { GripVertical } from "lucide-react";
 import { StickyPile } from "@/components/StickyPile";
 import { SprintBadge } from "@/components/SprintBadge";
 import { SPRINT_COLORS } from "@/lib/utils";
@@ -15,7 +17,7 @@ type Task = {
 
 export default function FocusPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [queue, setQueue] = useState<string[]>([]);
   const [session, setSession] = useState<Task[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -29,15 +31,23 @@ export default function FocusPage() {
   }, []);
 
   function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+    setQueue((prev) =>
+      prev.includes(id) ? prev.filter((q) => q !== id) : [...prev, id]
+    );
+  }
+
+  function handleDragEnd(result: DropResult) {
+    if (!result.destination) return;
+    setQueue((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(result.source.index, 1);
+      next.splice(result.destination!.index, 0, moved);
       return next;
     });
   }
 
   function startSession() {
-    const pile = tasks.filter((t) => selected.has(t.id));
+    const pile = queue.map((id) => tasks.find((t) => t.id === id)!).filter(Boolean);
     setSession(pile);
   }
 
@@ -52,7 +62,7 @@ export default function FocusPage() {
 
   function resetSession() {
     setSession(null);
-    setSelected(new Set());
+    setQueue([]);
   }
 
   if (loading) {
@@ -62,6 +72,8 @@ export default function FocusPage() {
       </div>
     );
   }
+
+  const queuedTasks = queue.map((id) => tasks.find((t) => t.id === id)!).filter(Boolean);
 
   return (
     <div className="space-y-6">
@@ -86,7 +98,6 @@ export default function FocusPage() {
       </div>
 
       {session ? (
-        /* Active session: show the pile */
         <div className="flex justify-center py-8">
           <StickyPile
             tasks={session}
@@ -95,7 +106,6 @@ export default function FocusPage() {
           />
         </div>
       ) : (
-        /* Task selection */
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
           {/* Task list */}
           <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-5">
@@ -117,7 +127,7 @@ export default function FocusPage() {
                   >
                     <input
                       type="checkbox"
-                      checked={selected.has(task.id)}
+                      checked={queue.includes(task.id)}
                       onChange={() => toggle(task.id)}
                       className="w-4 h-4 rounded border-slate-300 dark:border-zinc-600 text-blue-500 focus:ring-blue-500/20"
                     />
@@ -132,23 +142,15 @@ export default function FocusPage() {
                 ))}
               </div>
             )}
-
-            <button
-              onClick={startSession}
-              disabled={selected.size === 0}
-              className="mt-4 w-full py-2.5 bg-slate-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-semibold rounded-lg hover:bg-slate-700 dark:hover:bg-zinc-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Start Focus Session →
-            </button>
           </div>
 
-          {/* Pile preview */}
+          {/* Queue panel */}
           <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-5">
             <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-zinc-500 mb-4">
-              Your pile ({selected.size} task{selected.size === 1 ? "" : "s"})
+              Your pile ({queue.length} task{queue.length === 1 ? "" : "s"})
             </div>
 
-            {selected.size === 0 ? (
+            {queue.length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <div
                   className="w-48 h-48 bg-amber-50 dark:bg-amber-100 rounded-sm shadow-md flex items-center justify-center"
@@ -160,36 +162,67 @@ export default function FocusPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center py-4 gap-3">
-                <div className="relative w-48 h-48">
-                  {selected.size > 2 && (
+              <DragDropContext onDragEnd={handleDragEnd}>
+                <Droppable droppableId="focus-queue">
+                  {(provided) => (
                     <div
-                      className="absolute inset-0 bg-amber-300 rounded-sm"
-                      style={{ transform: "rotate(3deg) translate(5px, 7px)", opacity: 0.4 }}
-                    />
-                  )}
-                  {selected.size > 1 && (
-                    <div
-                      className="absolute inset-0 bg-amber-200 rounded-sm"
-                      style={{ transform: "rotate(-1.5deg) translate(3px, 4px)", opacity: 0.65 }}
-                    />
-                  )}
-                  <div
-                    className="absolute inset-0 bg-yellow-100 rounded-sm shadow-md flex flex-col p-5"
-                  >
-                    <div className="text-[10px] font-semibold text-amber-700 opacity-60 mb-2">
-                      1 of {selected.size}
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className="space-y-1 mb-4"
+                    >
+                      {queuedTasks.map((task, index) => (
+                        <Draggable key={task.id} draggableId={task.id} index={index}>
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              className={`flex items-center gap-2 px-2 py-2 rounded-lg border text-sm ${
+                                snapshot.isDragging
+                                  ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 shadow-md"
+                                  : "bg-slate-50 dark:bg-zinc-800 border-slate-100 dark:border-zinc-700"
+                              }`}
+                            >
+                              <span
+                                {...provided.dragHandleProps}
+                                className="text-slate-300 dark:text-zinc-600 hover:text-slate-500 dark:hover:text-zinc-400 cursor-grab"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </span>
+                              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 w-4 shrink-0">
+                                {index + 1}
+                              </span>
+                              <span className="flex-1 text-slate-800 dark:text-zinc-200 truncate">
+                                {task.name}
+                              </span>
+                              <SprintBadge sprint={task.sprint} size="sm" />
+                              <span className="text-xs text-slate-400 dark:text-zinc-500 shrink-0">
+                                {task.estMinutes}m
+                              </span>
+                              <button
+                                onClick={() => toggle(task.id)}
+                                className="text-slate-300 dark:text-zinc-600 hover:text-rose-400 dark:hover:text-rose-400 shrink-0 ml-1 leading-none"
+                                title="Remove from pile"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
                     </div>
-                    <div className="text-sm font-semibold text-slate-900 leading-snug">
-                      {tasks.find((t) => selected.has(t.id))?.name}
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-400 dark:text-zinc-500">
-                  {selected.size} task{selected.size === 1 ? "" : "s"} queued
-                </p>
-              </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
             )}
+
+            <button
+              onClick={startSession}
+              disabled={queue.length === 0}
+              className="w-full py-2.5 bg-slate-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-semibold rounded-lg hover:bg-slate-700 dark:hover:bg-zinc-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Start Focus Session →
+            </button>
           </div>
         </div>
       )}
