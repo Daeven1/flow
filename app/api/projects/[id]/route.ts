@@ -30,13 +30,14 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
-  const { name, deadline, notes, sortOrder } = body;
+  const { name, deadline, notes, sortOrder, active } = body;
 
   const data: Record<string, unknown> = {};
   if ("name" in body) data.name = name;
   if ("deadline" in body) data.deadline = deadline ? new Date(deadline) : null;
   if ("notes" in body) data.notes = notes;
   if ("sortOrder" in body) data.sortOrder = Number(sortOrder);
+  if ("active" in body) data.active = Boolean(active);
 
   const project = await prisma.project.update({
     where: { id, userId },
