@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
@@ -6,11 +6,14 @@ import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({ subsets: ["latin"] });
 
+export const viewport: Viewport = {
+  themeColor: "#1e293b",
+};
+
 export const metadata: Metadata = {
   title: "FLOW — MYP Design Teacher Productivity",
   description: "ADHD-friendly productivity app for MYP Design teachers",
   manifest: "/manifest.json",
-  themeColor: "#1e293b",
   appleWebApp: {
     capable: true,
     title: "flow",
