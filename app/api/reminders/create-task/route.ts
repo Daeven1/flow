@@ -18,8 +18,8 @@ export async function POST(req: Request) {
   }
 
   // Idempotency: if a task with this reminderId already exists, return it
-  const existing = await prisma.task.findFirst({
-    where: { userId, reminderId: reminder_id },
+  const existing = await prisma.task.findUnique({
+    where: { userId_reminderId: { userId, reminderId: reminder_id } },
   });
   if (existing) {
     return NextResponse.json({ success: true, task_id: existing.id });
