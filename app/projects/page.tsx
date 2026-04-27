@@ -14,7 +14,7 @@ import { formatMinutes, SPRINT_LABELS, formatRelativeDate } from "@/lib/utils";
 import {
   Plus, Trash2, ChevronDown, ChevronRight, CheckCircle2, Circle,
   Pencil, Check, X, BookmarkPlus, Moon, CalendarClock, Wand2,
-  GripVertical, ArrowUpRight,
+  GripVertical, ArrowUpRight, CheckSquare, Square,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -35,6 +35,7 @@ interface Project {
   name: string;
   deadline: string | null;
   templateKey: string | null;
+  active: boolean;
   tasks: Task[];
 }
 
@@ -246,6 +247,20 @@ export default function ProjectsPage() {
     }
   }
 
+  async function toggleActive(id: string, active: boolean) {
+    const previous = projects;
+    setProjects((prev) => prev.map((p) => p.id === id ? { ...p, active } : p));
+    try {
+      await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+    } catch {
+      setProjects(previous);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -345,9 +360,11 @@ export default function ProjectsPage() {
                       <div
                         ref={provided.innerRef}
                         {...provided.draggableProps}
-                        className={`rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 ${
-                          snapshot.isDragging ? "shadow-lg" : ""
-                        }`}
+                        className={`rounded-xl border transition-colors ${
+                          project.active
+                            ? "bg-green-50 dark:bg-green-950/30 border-green-300 dark:border-green-800"
+                            : "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800"
+                        } ${snapshot.isDragging ? "shadow-lg" : ""}`}
                       >
                         {/* Project header */}
                         <div className="flex items-center gap-3 p-4">
@@ -383,6 +400,15 @@ export default function ProjectsPage() {
                       </span>
                     </div>
                   </div>
+                  <button
+                    onClick={() => toggleActive(project.id, !project.active)}
+                    className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                    title={project.active ? "Mark inactive" : "Mark active"}
+                  >
+                    {project.active
+                      ? <CheckSquare className="h-4 w-4 text-green-500" />
+                      : <Square className="h-4 w-4 text-slate-300 dark:text-zinc-600" />}
+                  </button>
                   <Link
                     href={`/projects/${project.id}`}
                     className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
