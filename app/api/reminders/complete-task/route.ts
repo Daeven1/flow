@@ -19,8 +19,8 @@ export async function PATCH(req: Request) {
     where: { userId_reminderId: { userId, reminderId: reminder_id } },
   });
 
-  if (!task) {
-    return NextResponse.json({ success: true }); // no-op: task deleted or not found
+  if (!task || task.done) {
+    return NextResponse.json({ success: true }); // no-op: task deleted, not found, or already done
   }
 
   await prisma.task.update({
