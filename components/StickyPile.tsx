@@ -55,41 +55,41 @@ export function StickyPile({ tasks, onComplete, onAllDone }: Props) {
   return (
     <div className="flex flex-col items-center gap-8">
       {/* Pile */}
-      <div className="relative w-72 h-72">
+      <div className="relative" style={{ width: "min(90vw, 480px)", height: "min(90vw, 480px)" }}>
         {/* Shadow notes underneath */}
         {remaining > 2 && (
           <div
             className="absolute inset-0 bg-amber-300 rounded-sm"
-            style={{ transform: "rotate(3deg) translate(6px, 8px)", opacity: 0.4 }}
+            style={{ transform: "rotate(3deg) translate(8px, 10px)", opacity: 0.4 }}
           />
         )}
         {remaining > 1 && (
           <div
             className="absolute inset-0 bg-amber-200 rounded-sm"
-            style={{ transform: "rotate(-1.5deg) translate(3px, 5px)", opacity: 0.65 }}
+            style={{ transform: "rotate(-1.5deg) translate(4px, 6px)", opacity: 0.65 }}
           />
         )}
 
         {/* Top note */}
         <div
-          className="absolute inset-0 bg-yellow-100 dark:bg-yellow-200 rounded-sm shadow-lg flex flex-col p-7"
+          className="absolute inset-0 bg-yellow-100 dark:bg-yellow-200 rounded-sm shadow-xl flex flex-col p-10"
           style={{
             transition: peeling ? "transform 0.35s ease-in, opacity 0.35s ease-in" : undefined,
             transform: peeling ? "translateY(-120%) rotate(-4deg)" : "rotate(0deg)",
             opacity: peeling ? 0 : 1,
           }}
         >
-          <div className="text-[11px] font-semibold text-amber-700 opacity-60 mb-3">
+          <div className="text-sm font-semibold text-amber-700 opacity-60 mb-4">
             {current + 1} of {tasks.length}
           </div>
-          <div className="text-[17px] font-semibold text-slate-900 leading-snug flex-1">
+          <div className="text-2xl font-semibold text-slate-900 leading-snug flex-1">
             {task.name}
           </div>
-          <div className="flex items-center gap-2 mt-4">
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-800">
+          <div className="flex items-center gap-3 mt-6">
+            <span className="text-sm font-bold px-3 py-1 rounded bg-amber-200 text-amber-800">
               Sprint {task.sprint}
             </span>
-            <span className="text-[11px] text-amber-700 opacity-60">
+            <span className="text-sm text-amber-700 opacity-60">
               {task.estMinutes} min
             </span>
           </div>
