@@ -35,6 +35,8 @@ model Task {
   estMinutes    Int       @default(30)
   actualMinutes Int?
   pinned        Boolean   @default(false)
+  showInRegular Boolean   @default(false)
+  sortOrder     Int       @default(0)
   done          Boolean   @default(false)
   doneAt        DateTime?
   reminderId    String?

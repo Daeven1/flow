@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Task" ADD COLUMN "showInRegular" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "sortOrder" INTEGER NOT NULL DEFAULT 0;
