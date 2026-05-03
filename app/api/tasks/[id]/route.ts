@@ -20,6 +20,8 @@ export async function PATCH(
   const data: Record<string, unknown> = {};
 
   if ("pinned" in body) data.pinned = Boolean(body.pinned);
+  if ("showInRegular" in body) data.showInRegular = Boolean(body.showInRegular);
+  if ("sortOrder" in body) data.sortOrder = Number(body.sortOrder);
   if ("done" in body) {
     data.done = body.done;
     data.doneAt = body.done ? new Date() : null;
