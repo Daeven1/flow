@@ -26,7 +26,9 @@ import {
   ChevronDown,
   ChevronUp,
   Trophy,
+  GripVertical,
 } from "lucide-react";
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import {
   formatMinutes,
   formatRelativeDate,
@@ -117,6 +119,7 @@ export default function DailyPage() {
   const [enrichedLinks, setEnrichedLinks] = useState<{ url: string; title: string | null }[]>([]);
   const [gainInput, setGainInput] = useState("");
   const [addingToGain, setAddingToGain] = useState(false);
+  const [urgentCustomOrder, setUrgentCustomOrder] = useState<string[]>([]);
 
   const loadData = useCallback(async () => {
     const [logRes, tasksRes] = await Promise.all([
@@ -132,6 +135,27 @@ export default function DailyPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Keep urgentCustomOrder in sync when tasks change (preserves manual order, appends new items)
+  useEffect(() => {
+    const now = startOfDay(new Date());
+    const urgentIds = new Set(
+      tasks
+        .filter((t) => {
+          if (t.done) return false;
+          if (!t.deadline) return false;
+          return startOfDay(parseISO(t.deadline)) <= now;
+        })
+        .map((t) => t.id)
+    );
+    setUrgentCustomOrder((prev) => {
+      const kept = prev.filter((id) => urgentIds.has(id));
+      const keptSet = new Set(kept);
+      const newIds = [...urgentIds].filter((id) => !keptSet.has(id));
+      return [...kept, ...newIds];
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks]);
 
   async function saveLog(update: Partial<DailyLog>) {
     const next = { ...log, ...update };
@@ -239,6 +263,16 @@ export default function DailyPage() {
     }
   }
 
+  function handleUrgentDragEnd(result: DropResult) {
+    if (!result.destination) return;
+    setUrgentCustomOrder((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(result.source.index, 1);
+      next.splice(result.destination!.index, 0, moved);
+      return next;
+    });
+  }
+
   // ── Date anchors ──
   const today = startOfDay(new Date());
   const tomorrow = addDays(today, 1);
@@ -274,6 +308,13 @@ export default function DailyPage() {
     return dl <= today;
   });
   const urgentIds = new Set(urgentNow.map((t) => t.id));
+
+  const urgentDisplayed =
+    urgentCustomOrder.length > 0
+      ? urgentCustomOrder
+          .map((id) => urgentNow.find((t) => t.id === id))
+          .filter((t): t is Task => t !== undefined)
+      : urgentNow;
 
   // Sort helper: by sprint, then by deadline soonest-first
   function sortBySprintThenDeadline(list: Task[]) {
@@ -445,7 +486,7 @@ export default function DailyPage() {
       </div>
 
       {/* ── ⚡ AUTO-ESCALATED: Due very soon ── */}
-      {urgentNow.length > 0 && (
+      {urgentDisplayed.length > 0 && (
         <div className="rounded border-2 border-red-300 dark:border-red-800 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800">
             <Zap className="h-4 w-4 text-red-500" />
@@ -454,37 +495,63 @@ export default function DailyPage() {
               — these tasks need attention today regardless of sprint
             </span>
           </div>
-          <div className="divide-y divide-red-100 dark:divide-red-900">
-            {urgentNow.map((task) => {
-              const dl = task.deadline ? startOfDay(parseISO(task.deadline)) : null;
-              const daysLeft = dl ? differenceInCalendarDays(dl, today) : null;
-              return (
-                <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-zinc-950" style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}` }}>
-                  <button onClick={() => toggleTask(task.id, true)}>
-                    <Circle className="h-4 w-4 text-red-300 hover:text-green-500 transition-colors" />
-                  </button>
-                  <span className="flex-1 text-sm font-medium">{task.name}</span>
-                  {task.workCategory === "GRADING" && (
-                    <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-                  )}
-                  {task.project && (
-                    <span className="text-xs text-slate-400 dark:text-zinc-500 hidden sm:block shrink-0">{task.project.name}</span>
-                  )}
-                  <span className={`text-xs font-semibold shrink-0 ${
-                    daysLeft !== null && daysLeft < 0 ? "text-red-600" :
-                    daysLeft === 0 ? "text-red-600" : "text-amber-600"
-                  }`}>
-                    {daysLeft === null ? "" :
-                     daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` :
-                     daysLeft === 0 ? "due today" :
-                     "due tomorrow"}
-                  </span>
-                  <SprintBadge sprint={task.sprint} size="sm" />
-                  <span className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
+          <DragDropContext onDragEnd={handleUrgentDragEnd}>
+            <Droppable droppableId="urgent-now">
+              {(provided) => (
+                <div
+                  className="divide-y divide-red-100 dark:divide-red-900"
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                >
+                  {urgentDisplayed.map((task, index) => {
+                    const dl = task.deadline ? startOfDay(parseISO(task.deadline)) : null;
+                    const daysLeft = dl ? differenceInCalendarDays(dl, today) : null;
+                    return (
+                      <Draggable key={task.id} draggableId={task.id} index={index}>
+                        {(provided) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-zinc-950"
+                            style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}`, ...provided.draggableProps.style }}
+                          >
+                            <span
+                              {...provided.dragHandleProps}
+                              className="text-red-200 dark:text-red-900 cursor-grab active:cursor-grabbing shrink-0"
+                            >
+                              <GripVertical className="h-4 w-4" />
+                            </span>
+                            <button onClick={() => toggleTask(task.id, true)}>
+                              <Circle className="h-4 w-4 text-red-300 hover:text-green-500 transition-colors" />
+                            </button>
+                            <span className="flex-1 text-sm font-medium">{task.name}</span>
+                            {task.workCategory === "GRADING" && (
+                              <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                            )}
+                            {task.project && (
+                              <span className="text-xs text-slate-400 dark:text-zinc-500 hidden sm:block shrink-0">{task.project.name}</span>
+                            )}
+                            <span className={`text-xs font-semibold shrink-0 ${
+                              daysLeft !== null && daysLeft < 0 ? "text-red-600" :
+                              daysLeft === 0 ? "text-red-600" : "text-amber-600"
+                            }`}>
+                              {daysLeft === null ? "" :
+                               daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` :
+                               daysLeft === 0 ? "due today" :
+                               "due tomorrow"}
+                            </span>
+                            <SprintBadge sprint={task.sprint} size="sm" />
+                            <span className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
+                          </div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
+                  {provided.placeholder}
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </Droppable>
+          </DragDropContext>
         </div>
       )}
 
