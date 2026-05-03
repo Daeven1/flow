@@ -14,7 +14,11 @@ export async function GET(
   const { id } = await params;
   const project = await prisma.project.findUnique({
     where: { id, userId },
-    include: { tasks: { orderBy: { deadline: "asc" } } },
+    include: {
+      tasks: {
+        orderBy: [{ sortOrder: "asc" }, { deadline: "asc" }],
+      },
+    },
   });
 
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -42,7 +46,11 @@ export async function PATCH(
   const project = await prisma.project.update({
     where: { id, userId },
     data,
-    include: { tasks: { orderBy: { deadline: "asc" } } },
+    include: {
+      tasks: {
+        orderBy: [{ sortOrder: "asc" }, { deadline: "asc" }],
+      },
+    },
   });
 
   return NextResponse.json(project);
