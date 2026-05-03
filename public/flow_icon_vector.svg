@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1c2a"/>
+      <stop offset="100%" stop-color="#1e2f45"/>
+    </linearGradient>
+    <linearGradient id="leafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#b8ff5a"/>
+      <stop offset="100%" stop-color="#2e9f3f"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="220" fill="url(#bgGrad)"/>
+
+  <!-- Leaf wing shape -->
+  <path d="M280 640 C 400 520, 520 420, 760 260
+           C 680 420, 620 560, 420 720
+           C 360 760, 300 720, 280 640 Z"
+        fill="url(#leafGrad)"/>
+
+  <!-- Smaller leaf -->
+  <path d="M240 640 C 300 600, 340 560, 380 520
+           C 340 620, 300 700, 240 640 Z"
+        fill="url(#leafGrad)"/>
+</svg>
