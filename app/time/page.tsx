@@ -108,7 +108,7 @@ export default function TimePage() {
               </SelectTrigger>
               <SelectContent>
                 {tasks
-                  .filter((t) => !t.done)
+                  .filter((t) => t.done)
                   .map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
@@ -162,7 +162,7 @@ export default function TimePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {tasks.filter((t) => t.actualMinutes != null).length === 0 ? (
+              {tasks.filter((t) => t.done && t.actualMinutes != null).length === 0 ? (
                 <tr>
                   <td
                     colSpan={5}
@@ -173,7 +173,7 @@ export default function TimePage() {
                 </tr>
               ) : (
                 tasks
-                  .filter((t) => t.actualMinutes != null)
+                  .filter((t) => t.done && t.actualMinutes != null)
                   .map((task) => {
                     const diff = (task.actualMinutes ?? 0) - task.estMinutes;
                     return (
