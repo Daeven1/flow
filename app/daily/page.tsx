@@ -27,6 +27,9 @@ import {
   ChevronUp,
   Trophy,
   GripVertical,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import {
@@ -120,6 +123,11 @@ export default function DailyPage() {
   const [gainInput, setGainInput] = useState("");
   const [addingToGain, setAddingToGain] = useState(false);
   const [urgentCustomOrder, setUrgentCustomOrder] = useState<string[]>([]);
+  const [editingUrgentId, setEditingUrgentId] = useState<string | null>(null);
+  const [editUrgentName, setEditUrgentName] = useState("");
+  const [editUrgentSprint, setEditUrgentSprint] = useState("1");
+  const [editUrgentDeadline, setEditUrgentDeadline] = useState("");
+  const [editUrgentEst, setEditUrgentEst] = useState("30");
 
   const loadData = useCallback(async () => {
     const [logRes, tasksRes] = await Promise.all([
@@ -271,6 +279,29 @@ export default function DailyPage() {
       next.splice(result.destination!.index, 0, moved);
       return next;
     });
+  }
+
+  function startEditUrgent(task: Task) {
+    setEditingUrgentId(task.id);
+    setEditUrgentName(task.name);
+    setEditUrgentSprint(String(task.sprint));
+    setEditUrgentDeadline(task.deadline ? task.deadline.slice(0, 10) : "");
+    setEditUrgentEst(String(task.estMinutes));
+  }
+
+  async function saveEditUrgent(taskId: string) {
+    await fetch(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editUrgentName,
+        sprint: parseInt(editUrgentSprint),
+        deadline: editUrgentDeadline || null,
+        estMinutes: parseInt(editUrgentEst),
+      }),
+    });
+    setEditingUrgentId(null);
+    loadData();
   }
 
   // ── Date anchors ──
@@ -512,36 +543,92 @@ export default function DailyPage() {
                           <div
                             ref={provided.innerRef}
                             {...provided.draggableProps}
-                            className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-zinc-950"
+                            className="bg-white dark:bg-zinc-950"
                             style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}`, ...provided.draggableProps.style }}
                           >
-                            <span
-                              {...provided.dragHandleProps}
-                              className="text-red-200 dark:text-red-900 cursor-grab active:cursor-grabbing shrink-0"
-                            >
-                              <GripVertical className="h-4 w-4" />
-                            </span>
-                            <button onClick={() => toggleTask(task.id, true)}>
-                              <Circle className="h-4 w-4 text-red-300 hover:text-green-500 transition-colors" />
-                            </button>
-                            <span className="flex-1 text-sm font-medium">{task.name}</span>
-                            {task.workCategory === "GRADING" && (
-                              <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                            {editingUrgentId === task.id ? (
+                              <div className="px-4 py-3 space-y-2 bg-red-50 dark:bg-red-950">
+                                <Input
+                                  value={editUrgentName}
+                                  onChange={(e) => setEditUrgentName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") saveEditUrgent(task.id);
+                                    if (e.key === "Escape") setEditingUrgentId(null);
+                                  }}
+                                  autoFocus
+                                  className="text-sm"
+                                />
+                                <div className="flex items-center gap-2">
+                                  <Select value={editUrgentSprint} onValueChange={setEditUrgentSprint}>
+                                    <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      {[1, 2, 3, 4].map((s) => (
+                                        <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    type="date"
+                                    value={editUrgentDeadline}
+                                    onChange={(e) => setEditUrgentDeadline(e.target.value)}
+                                    className="h-8 text-xs w-36"
+                                  />
+                                  <Input
+                                    type="number"
+                                    min="5"
+                                    step="5"
+                                    value={editUrgentEst}
+                                    onChange={(e) => setEditUrgentEst(e.target.value)}
+                                    className="h-8 text-xs w-24"
+                                    placeholder="Est. mins"
+                                  />
+                                  <div className="flex gap-2 ml-auto">
+                                    <Button variant="ghost" size="sm" onClick={() => setEditingUrgentId(null)}>
+                                      <X className="h-3.5 w-3.5 mr-1" /> Cancel
+                                    </Button>
+                                    <Button size="sm" onClick={() => saveEditUrgent(task.id)}>
+                                      <Check className="h-3.5 w-3.5 mr-1" /> Save
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-3 px-4 py-2.5 group">
+                                <span
+                                  {...provided.dragHandleProps}
+                                  className="text-red-200 dark:text-red-900 cursor-grab active:cursor-grabbing shrink-0"
+                                >
+                                  <GripVertical className="h-4 w-4" />
+                                </span>
+                                <button onClick={() => toggleTask(task.id, true)}>
+                                  <Circle className="h-4 w-4 text-red-300 hover:text-green-500 transition-colors" />
+                                </button>
+                                <span className="flex-1 text-sm font-medium">{task.name}</span>
+                                {task.workCategory === "GRADING" && (
+                                  <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                                )}
+                                {task.project && (
+                                  <span className="text-xs text-slate-400 dark:text-zinc-500 hidden sm:block shrink-0">{task.project.name}</span>
+                                )}
+                                <span className={`text-xs font-semibold shrink-0 ${
+                                  daysLeft !== null && daysLeft < 0 ? "text-red-600" :
+                                  daysLeft === 0 ? "text-red-600" : "text-amber-600"
+                                }`}>
+                                  {daysLeft === null ? "" :
+                                   daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` :
+                                   daysLeft === 0 ? "due today" :
+                                   "due tomorrow"}
+                                </span>
+                                <SprintBadge sprint={task.sprint} size="sm" />
+                                <span className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
+                                <button
+                                  onClick={() => startEditUrgent(task)}
+                                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-300 hover:text-red-600 transition-colors shrink-0"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             )}
-                            {task.project && (
-                              <span className="text-xs text-slate-400 dark:text-zinc-500 hidden sm:block shrink-0">{task.project.name}</span>
-                            )}
-                            <span className={`text-xs font-semibold shrink-0 ${
-                              daysLeft !== null && daysLeft < 0 ? "text-red-600" :
-                              daysLeft === 0 ? "text-red-600" : "text-amber-600"
-                            }`}>
-                              {daysLeft === null ? "" :
-                               daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` :
-                               daysLeft === 0 ? "due today" :
-                               "due tomorrow"}
-                            </span>
-                            <SprintBadge sprint={task.sprint} size="sm" />
-                            <span className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
                           </div>
                         )}
                       </Draggable>
