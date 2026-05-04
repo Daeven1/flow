@@ -13,9 +13,10 @@ import {
 import { formatMinutes, SPRINT_LABELS, formatRelativeDate } from "@/lib/utils";
 import {
   Plus, Trash2, CheckCircle2, Circle, Pencil, Check, X,
-  Moon, CalendarClock, Wand2, ChevronLeft,
+  Moon, CalendarClock, Wand2, ChevronLeft, GripVertical, Globe,
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import { format } from "date-fns";
 
 interface Task {
   id: string;
@@ -27,6 +28,7 @@ interface Task {
   scheduledDate: string | null;
   workCategory: string;
   leadDays: number;
+  showInRegular: boolean;
 }
 
 interface Project {
@@ -246,6 +248,39 @@ export default function ProjectDetailPage() {
     reloadTasks();
   }
 
+  async function handleTaskDragEnd(result: DropResult) {
+    if (!result.destination || !project) return;
+    const reordered = [...sortedTasks];
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+
+    // Optimistically update local state
+    setProject((p) => p ? { ...p, tasks: reordered } : p);
+
+    // Persist new sortOrder for each task
+    await Promise.all(
+      reordered.map((task, index) =>
+        fetch(`/api/tasks/${task.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sortOrder: index }),
+        })
+      )
+    );
+  }
+
+  async function toggleShowInRegular(taskId: string, current: boolean) {
+    const next = !current;
+    setProject((p) =>
+      p ? { ...p, tasks: p.tasks.map((t) => t.id === taskId ? { ...t, showInRegular: next } : t) } : p
+    );
+    await fetch(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showInRegular: next }),
+    });
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-zinc-400 text-sm">
@@ -268,12 +303,7 @@ export default function ProjectDetailPage() {
     );
   }
 
-  const sortedTasks = [...project.tasks].sort((a, b) => {
-    if (!a.deadline && !b.deadline) return 0;
-    if (!a.deadline) return 1;
-    if (!b.deadline) return -1;
-    return parseISO(a.deadline).getTime() - parseISO(b.deadline).getTime();
-  });
+  const sortedTasks = project.tasks;
 
   const donePct = project.tasks.length > 0
     ? Math.round((project.tasks.filter((t) => t.done).length / project.tasks.length) * 100)
@@ -373,186 +403,218 @@ export default function ProjectDetailPage() {
             <h2 className="font-medium text-sm">Tasks</h2>
           </div>
 
-          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {sortedTasks.length === 0 && !addingTask && (
-              <p className="px-4 py-3 text-sm text-zinc-400">No tasks yet.</p>
-            )}
-
-            {sortedTasks.map((task) =>
-              editingTaskId === task.id ? (
-                <div key={task.id} className="px-4 py-3 space-y-2 bg-slate-50 dark:bg-zinc-800">
-                  <Input
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") saveEditTask(task.id);
-                      if (e.key === "Escape") setEditingTaskId(null);
-                    }}
-                    autoFocus
-                    className="text-sm"
-                  />
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div className="space-y-1">
-                      <label className="text-xs text-slate-500 dark:text-zinc-400">Sprint</label>
-                      <Select value={editSprint} onValueChange={setEditSprint}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {[1, 2, 3, 4].map((s) => (
-                            <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-slate-500 dark:text-zinc-400">Category</label>
-                      <Select value={editCategory} onValueChange={setEditCategory}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="STANDARD" className="text-xs">📅 Prep period</SelectItem>
-                          <SelectItem value="GRADING" className="text-xs">🌙 Work night</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-slate-500 dark:text-zinc-400">Deadline</label>
-                      <Input type="date" value={editDeadline} onChange={(e) => setEditDeadline(e.target.value)} className="h-8 text-xs" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-slate-500 dark:text-zinc-400">Lead days</label>
-                      <Input type="number" min="0" value={editLeadDays} onChange={(e) => setEditLeadDays(e.target.value)} className="h-8 text-xs" />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="space-y-1 w-28">
-                      <label className="text-xs text-slate-500 dark:text-zinc-400">Est. mins</label>
-                      <Input type="number" min="5" step="5" value={editEst} onChange={(e) => setEditEst(e.target.value)} className="h-8 text-xs" />
-                    </div>
-                    <div className="flex gap-2 justify-end flex-1 items-end pb-0.5">
-                      <Button variant="ghost" size="sm" onClick={() => setEditingTaskId(null)}>
-                        <X className="h-3.5 w-3.5 mr-1" /> Cancel
-                      </Button>
-                      <Button size="sm" onClick={() => saveEditTask(task.id)}>
-                        <Check className="h-3.5 w-3.5 mr-1" /> Save
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
+          <DragDropContext onDragEnd={handleTaskDragEnd}>
+            <Droppable droppableId="project-tasks">
+              {(provided) => (
                 <div
-                  key={task.id}
-                  className={`flex items-center gap-3 px-4 py-2.5 group ${task.done ? "opacity-50" : ""}`}
+                  className="divide-y divide-zinc-100 dark:divide-zinc-800"
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
                 >
-                  <button onClick={() => toggleTask(task.id, !task.done)}>
-                    {task.done
-                      ? <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      : <Circle className="h-4 w-4 text-zinc-300 hover:text-green-500 transition-colors" />}
-                  </button>
-                  <span className={`flex-1 text-sm ${task.done ? "line-through" : ""}`}>{task.name}</span>
-                  {task.workCategory === "GRADING" && <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
-                  {task.scheduledDate && (
-                    <span className="text-xs text-zinc-400 shrink-0 flex items-center gap-1">
-                      <CalendarClock className="h-3 w-3" />
-                      {formatRelativeDate(task.scheduledDate)}
-                    </span>
+                  {sortedTasks.length === 0 && !addingTask && (
+                    <p className="px-4 py-3 text-sm text-zinc-400">No tasks yet.</p>
                   )}
-                  {task.deadline && <UrgencyBadge dueDate={task.deadline} />}
-                  <SprintBadge sprint={task.sprint} size="sm" />
-                  <span className="text-xs text-zinc-400 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
-                  <button
-                    onClick={() => startEditTask(task)}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 transition-colors shrink-0"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => deleteTask(task.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-red-500 transition-colors shrink-0"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )
-            )}
 
-            {/* Add task */}
-            {addingTask ? (
-              <div className="px-4 py-3 space-y-2 bg-slate-50 dark:bg-zinc-800">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-zinc-500">New task</span>
-                  {presets.length > 0 && (
-                    <Select onValueChange={applyPreset}>
-                      <SelectTrigger className="h-7 text-xs w-44 gap-1">
-                        <Wand2 className="h-3 w-3 text-zinc-400 shrink-0" />
-                        <SelectValue placeholder="Use a preset…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {presets.map((p) => (
-                          <SelectItem key={p.id} value={p.id} className="text-xs">{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  {sortedTasks.map((task, index) =>
+                    editingTaskId === task.id ? (
+                      <div key={task.id} className="px-4 py-3 space-y-2 bg-slate-50 dark:bg-zinc-800">
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEditTask(task.id);
+                            if (e.key === "Escape") setEditingTaskId(null);
+                          }}
+                          autoFocus
+                          className="text-sm"
+                        />
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <div className="space-y-1">
+                            <label className="text-xs text-slate-500 dark:text-zinc-400">Sprint</label>
+                            <Select value={editSprint} onValueChange={setEditSprint}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {[1, 2, 3, 4].map((s) => (
+                                  <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-slate-500 dark:text-zinc-400">Category</label>
+                            <Select value={editCategory} onValueChange={setEditCategory}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="STANDARD" className="text-xs">📅 Prep period</SelectItem>
+                                <SelectItem value="GRADING" className="text-xs">🌙 Work night</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-slate-500 dark:text-zinc-400">Deadline</label>
+                            <Input type="date" value={editDeadline} onChange={(e) => setEditDeadline(e.target.value)} className="h-8 text-xs" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-slate-500 dark:text-zinc-400">Lead days</label>
+                            <Input type="number" min="0" value={editLeadDays} onChange={(e) => setEditLeadDays(e.target.value)} className="h-8 text-xs" />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="space-y-1 w-28">
+                            <label className="text-xs text-slate-500 dark:text-zinc-400">Est. mins</label>
+                            <Input type="number" min="5" step="5" value={editEst} onChange={(e) => setEditEst(e.target.value)} className="h-8 text-xs" />
+                          </div>
+                          <div className="flex gap-2 justify-end flex-1 items-end pb-0.5">
+                            <Button variant="ghost" size="sm" onClick={() => setEditingTaskId(null)}>
+                              <X className="h-3.5 w-3.5 mr-1" /> Cancel
+                            </Button>
+                            <Button size="sm" onClick={() => saveEditTask(task.id)}>
+                              <Check className="h-3.5 w-3.5 mr-1" /> Save
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <Draggable key={task.id} draggableId={task.id} index={index}>
+                        {(provided) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            className={`flex items-center gap-3 px-4 py-2.5 group ${task.done ? "opacity-50" : ""}`}
+                          >
+                            <span
+                              {...provided.dragHandleProps}
+                              className="text-zinc-200 dark:text-zinc-700 cursor-grab active:cursor-grabbing shrink-0"
+                            >
+                              <GripVertical className="h-4 w-4" />
+                            </span>
+                            <button onClick={() => toggleTask(task.id, !task.done)}>
+                              {task.done
+                                ? <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                : <Circle className="h-4 w-4 text-zinc-300 hover:text-green-500 transition-colors" />}
+                            </button>
+                            <span className={`flex-1 text-sm ${task.done ? "line-through" : ""}`}>{task.name}</span>
+                            {task.workCategory === "GRADING" && <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
+                            {task.scheduledDate && (
+                              <span className="text-xs text-zinc-400 shrink-0 flex items-center gap-1">
+                                <CalendarClock className="h-3 w-3" />
+                                {formatRelativeDate(task.scheduledDate)}
+                              </span>
+                            )}
+                            {task.deadline && <UrgencyBadge dueDate={task.deadline} />}
+                            <SprintBadge sprint={task.sprint} size="sm" />
+                            <button
+                              onClick={() => toggleShowInRegular(task.id, task.showInRegular)}
+                              title={task.showInRegular ? "Shown in all views — click to hide" : "Show in all views"}
+                              className={`p-1 rounded transition-colors shrink-0 ${
+                                task.showInRegular
+                                  ? "text-blue-500 hover:text-blue-700"
+                                  : "text-zinc-200 dark:text-zinc-700 hover:text-zinc-400"
+                              }`}
+                            >
+                              <Globe className="h-3.5 w-3.5" />
+                            </button>
+                            <span className="text-xs text-zinc-400 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
+                            <button
+                              onClick={() => startEditTask(task)}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 transition-colors shrink-0"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => deleteTask(task.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-red-500 transition-colors shrink-0"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </Draggable>
+                    )
+                  )}
+                  {provided.placeholder}
+
+                  {addingTask ? (
+                    <div className="px-4 py-3 space-y-2 bg-slate-50 dark:bg-zinc-800">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-zinc-500">New task</span>
+                        {presets.length > 0 && (
+                          <Select onValueChange={applyPreset}>
+                            <SelectTrigger className="h-7 text-xs w-44 gap-1">
+                              <Wand2 className="h-3 w-3 text-zinc-400 shrink-0" />
+                              <SelectValue placeholder="Use a preset…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {presets.map((p) => (
+                                <SelectItem key={p.id} value={p.id} className="text-xs">{p.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                      <Input
+                        placeholder="Task name"
+                        value={newTaskName}
+                        onChange={(e) => setNewTaskName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") addTask();
+                          if (e.key === "Escape") setAddingTask(false);
+                        }}
+                        autoFocus
+                        className="text-sm"
+                      />
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-500 dark:text-zinc-400">Sprint</label>
+                          <Select value={newTaskSprint} onValueChange={setNewTaskSprint}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {[1, 2, 3, 4].map((s) => (
+                                <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-500 dark:text-zinc-400">Category</label>
+                          <Select value={newTaskCategory} onValueChange={setNewTaskCategory}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="STANDARD" className="text-xs">📅 Prep period</SelectItem>
+                              <SelectItem value="GRADING" className="text-xs">🌙 Work night</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-500 dark:text-zinc-400">Deadline</label>
+                          <Input type="date" value={newTaskDeadline} onChange={(e) => setNewTaskDeadline(e.target.value)} className="h-8 text-xs" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-500 dark:text-zinc-400">Est. mins</label>
+                          <Input type="number" min="5" step="5" value={newTaskEst} onChange={(e) => setNewTaskEst(e.target.value)} className="h-8 text-xs" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="ghost" size="sm" onClick={() => setAddingTask(false)}>Cancel</Button>
+                        <Button size="sm" onClick={addTask} disabled={!newTaskName.trim()}>Add task</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setAddingTask(true);
+                        setNewTaskName(""); setNewTaskSprint("4"); setNewTaskEst("30");
+                        setNewTaskDeadline(""); setNewTaskCategory("STANDARD"); setNewTaskLeadDays("0");
+                      }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add task
+                    </button>
                   )}
                 </div>
-                <Input
-                  placeholder="Task name"
-                  value={newTaskName}
-                  onChange={(e) => setNewTaskName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") addTask();
-                    if (e.key === "Escape") setAddingTask(false);
-                  }}
-                  autoFocus
-                  className="text-sm"
-                />
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-500 dark:text-zinc-400">Sprint</label>
-                    <Select value={newTaskSprint} onValueChange={setNewTaskSprint}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {[1, 2, 3, 4].map((s) => (
-                          <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-500 dark:text-zinc-400">Category</label>
-                    <Select value={newTaskCategory} onValueChange={setNewTaskCategory}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="STANDARD" className="text-xs">📅 Prep period</SelectItem>
-                        <SelectItem value="GRADING" className="text-xs">🌙 Work night</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-500 dark:text-zinc-400">Deadline</label>
-                    <Input type="date" value={newTaskDeadline} onChange={(e) => setNewTaskDeadline(e.target.value)} className="h-8 text-xs" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-500 dark:text-zinc-400">Est. mins</label>
-                    <Input type="number" min="5" step="5" value={newTaskEst} onChange={(e) => setNewTaskEst(e.target.value)} className="h-8 text-xs" />
-                  </div>
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <Button variant="ghost" size="sm" onClick={() => setAddingTask(false)}>Cancel</Button>
-                  <Button size="sm" onClick={addTask} disabled={!newTaskName.trim()}>Add task</Button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  setAddingTask(true);
-                  setNewTaskName(""); setNewTaskSprint("4"); setNewTaskEst("30");
-                  setNewTaskDeadline(""); setNewTaskCategory("STANDARD"); setNewTaskLeadDays("0");
-                }}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
-              >
-                <Plus className="h-3.5 w-3.5" /> Add task
-              </button>
-            )}
-          </div>
+              )}
+            </Droppable>
+          </DragDropContext>
         </div>
 
         {/* Notes — 2/5 width */}
