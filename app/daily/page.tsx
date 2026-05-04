@@ -290,7 +290,7 @@ export default function DailyPage() {
   }
 
   async function saveEditUrgent(taskId: string) {
-    await fetch(`/api/tasks/${taskId}`, {
+    const res = await fetch(`/api/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -300,6 +300,7 @@ export default function DailyPage() {
         estMinutes: parseInt(editUrgentEst),
       }),
     });
+    if (!res.ok) return;
     setEditingUrgentId(null);
     loadData();
   }
