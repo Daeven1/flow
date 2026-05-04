@@ -73,7 +73,8 @@ export default function TimePage() {
 
   const selectedTaskObj = tasks.find((t) => t.id === selectedTask);
 
-  // Accuracy by sprint (based on tasks with actual data)
+  // Accuracy by sprint — intentionally includes all tasks with logged time (done or not)
+  // so the bars reflect full historical accuracy, not just completed work
   const sprintStats = [1, 2, 3, 4].map((s) => {
     const ts = tasks.filter((t) => t.sprint === s && t.actualMinutes != null);
     const totalEst = ts.reduce((sum, t) => sum + t.estMinutes, 0);
