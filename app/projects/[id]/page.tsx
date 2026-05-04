@@ -241,6 +241,7 @@ export default function ProjectDetailPage() {
         deadline: newTaskDeadline || null,
         workCategory: newTaskCategory,
         leadDays: parseInt(newTaskLeadDays),
+        sortOrder: project ? project.tasks.length : 0,
       }),
     });
     setNewTaskName(""); setNewTaskDeadline(""); setNewTaskLeadDays("0");
@@ -250,15 +251,14 @@ export default function ProjectDetailPage() {
 
   async function handleTaskDragEnd(result: DropResult) {
     if (!result.destination || !project) return;
-    const reordered = [...sortedTasks];
+    const previousTasks = [...project.tasks];
+    const reordered = [...project.tasks];
     const [moved] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, moved);
 
-    // Optimistically update local state
     setProject((p) => p ? { ...p, tasks: reordered } : p);
 
-    // Persist new sortOrder for each task
-    await Promise.all(
+    const results = await Promise.all(
       reordered.map((task, index) =>
         fetch(`/api/tasks/${task.id}`, {
           method: "PATCH",
@@ -267,6 +267,9 @@ export default function ProjectDetailPage() {
         })
       )
     );
+    if (results.some((r) => !r.ok)) {
+      setProject((p) => p ? { ...p, tasks: previousTasks } : p);
+    }
   }
 
   async function toggleShowInRegular(taskId: string, current: boolean) {
@@ -274,11 +277,16 @@ export default function ProjectDetailPage() {
     setProject((p) =>
       p ? { ...p, tasks: p.tasks.map((t) => t.id === taskId ? { ...t, showInRegular: next } : t) } : p
     );
-    await fetch(`/api/tasks/${taskId}`, {
+    const res = await fetch(`/api/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ showInRegular: next }),
     });
+    if (!res.ok) {
+      setProject((p) =>
+        p ? { ...p, tasks: p.tasks.map((t) => t.id === taskId ? { ...t, showInRegular: current } : t) } : p
+      );
+    }
   }
 
   if (loading) {
