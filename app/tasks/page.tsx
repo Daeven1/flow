@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useModeContext, type Mode } from "@/components/ModeProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SprintBadge } from "@/components/SprintBadge";
@@ -36,10 +37,18 @@ interface Task {
   deadline: string | null;
   scheduledDate: string | null;
   workCategory: string;
+  context: string;
   project: { id: string; name: string } | null;
 }
 
 export default function TasksPage() {
+  const { mode } = useModeContext();
+  const headingCls = mode === "PERSONAL" ? "text-lime-900" : "text-slate-900 dark:text-white";
+  const mutedCls   = mode === "PERSONAL" ? "text-yellow-700" : "text-zinc-500 dark:text-zinc-400";
+  const cardCls    = mode === "PERSONAL"
+    ? "bg-white border-yellow-200"
+    : "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800";
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState<FilterMode>("all");
   const [presets, setPresets] = useState<Preset[]>([]);
@@ -60,15 +69,16 @@ export default function TasksPage() {
   const [editScheduled, setEditScheduled] = useState("");
   const [editEst, setEditEst] = useState("30");
   const [editCategory, setEditCategory] = useState("STANDARD");
+  const [editContext, setEditContext] = useState<Mode>("PROFESSIONAL");
 
   const load = useCallback(async () => {
     const [tasksRes, presetsRes] = await Promise.all([
-      fetch("/api/tasks"),
+      fetch(`/api/tasks?context=${mode}`),
       fetch("/api/presets"),
     ]);
     setTasks(await tasksRes.json());
     setPresets(await presetsRes.json());
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     load();
@@ -94,6 +104,7 @@ export default function TasksPage() {
         estMinutes: newEst,
         deadline: newDeadline || null,
         workCategory: newCategory,
+        context: mode,
       }),
     });
     setNewName("");
@@ -133,6 +144,7 @@ export default function TasksPage() {
     setEditScheduled(task.scheduledDate ? task.scheduledDate.slice(0, 10) : "");
     setEditEst(String(task.estMinutes));
     setEditCategory(task.workCategory);
+    setEditContext((task.context as Mode) ?? "PROFESSIONAL");
   }
 
   async function saveEdit(id: string) {
@@ -146,6 +158,7 @@ export default function TasksPage() {
         scheduledDate: editScheduled || null,
         estMinutes: parseInt(editEst),
         workCategory: editCategory,
+        context: editContext,
       }),
     });
     setEditingId(null);
@@ -175,8 +188,8 @@ export default function TasksPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Tasks</h1>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Your full task backlog — add, filter by sprint, and manage everything in one place.</p>
+          <h1 className={`text-xl font-bold ${headingCls}`}>Tasks</h1>
+          <p className={`text-xs ${mutedCls} mt-0.5`}>Your full task backlog — add, filter by sprint, and manage everything in one place.</p>
         </div>
         <Button size="sm" onClick={() => setShowForm(!showForm)}>
           <Plus className="h-3.5 w-3.5 mr-1.5" />
@@ -186,7 +199,7 @@ export default function TasksPage() {
 
       {/* Add task form */}
       {showForm && (
-        <div className="rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-4 space-y-3">
+        <div className={`rounded-xl border ${cardCls} p-4 space-y-3`}>
           <div className="flex items-center justify-between">
             <h2 className="font-medium text-sm">New Task</h2>
             {presets.length > 0 && (
@@ -334,6 +347,22 @@ export default function TasksPage() {
                   <div className="space-y-1 w-32">
                     <label className="text-xs text-slate-500 dark:text-zinc-400">Est. mins</label>
                     <Input type="number" min="5" step="5" value={editEst} onChange={(e) => setEditEst(e.target.value)} className="h-8 text-xs" />
+                  </div>
+                  <div className="bg-stone-800 rounded-full p-0.5 flex gap-0.5 border border-stone-700 shrink-0 self-end mb-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditContext("PROFESSIONAL")}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${editContext === "PROFESSIONAL" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+                    >
+                      💼 Pro
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditContext("PERSONAL")}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${editContext === "PERSONAL" ? "bg-green-600 text-white" : "text-slate-400 hover:text-white"}`}
+                    >
+                      🌿 Home
+                    </button>
                   </div>
                   <div className="flex gap-2 justify-end flex-1 items-end pb-0.5">
                     <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>
