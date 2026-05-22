@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useModeContext, type Mode } from "@/components/ModeProvider";
 import { SprintBadge } from "@/components/SprintBadge";
 import { UrgencyBadge } from "@/components/UrgencyBadge";
 import { CapacityBar } from "@/components/CapacityBar";
@@ -33,12 +34,20 @@ interface Task {
   deadline: string | null;
   scheduledDate: string | null;
   workCategory: string;
+  context: string;
   project: { id: string; name: string } | null;
 }
 
 type SortMode = "scheduled" | "deadline";
 
 export default function SprintsPage() {
+  const { mode } = useModeContext();
+  const headingCls = mode === "PERSONAL" ? "text-lime-900" : "text-slate-900 dark:text-white";
+  const mutedCls   = mode === "PERSONAL" ? "text-yellow-700" : "text-zinc-500 dark:text-zinc-400";
+  const cardCls    = mode === "PERSONAL"
+    ? "bg-white border-yellow-200"
+    : "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800";
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>("scheduled");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -48,10 +57,11 @@ export default function SprintsPage() {
   const [editScheduled, setEditScheduled] = useState("");
   const [editEst, setEditEst] = useState("30");
   const [editCategory, setEditCategory] = useState("STANDARD");
+  const [editContext, setEditContext] = useState<Mode>("PROFESSIONAL");
 
   const load = useCallback(async () => {
-    setTasks(await fetch("/api/tasks").then((r) => r.json()));
-  }, []);
+    setTasks(await fetch(`/api/tasks?context=${mode}`).then((r) => r.json()));
+  }, [mode]);
 
   useEffect(() => {
     load();
@@ -83,6 +93,7 @@ export default function SprintsPage() {
     setEditScheduled(task.scheduledDate ? task.scheduledDate.slice(0, 10) : "");
     setEditEst(String(task.estMinutes));
     setEditCategory(task.workCategory);
+    setEditContext((task.context as Mode) ?? "PROFESSIONAL");
   }
 
   async function saveEdit(id: string) {
@@ -96,6 +107,7 @@ export default function SprintsPage() {
         scheduledDate: editScheduled || null,
         estMinutes: parseInt(editEst),
         workCategory: editCategory,
+        context: editContext,
       }),
     });
     setEditingId(null);
@@ -136,22 +148,22 @@ export default function SprintsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Sprints</h1>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">All open tasks organised by sprint — manage workload and capacity across S1–S4.</p>
+          <h1 className={`text-xl font-bold ${headingCls}`}>Sprints</h1>
+          <p className={`text-xs ${mutedCls} mt-0.5`}>All open tasks organised by sprint — manage workload and capacity across S1–S4.</p>
         </div>
         <div className="flex items-center gap-1 text-xs">
           <span className="text-zinc-400 mr-1">Sort:</span>
-          {(["scheduled", "deadline"] as SortMode[]).map((mode) => (
+          {(["scheduled", "deadline"] as SortMode[]).map((sm) => (
             <button
-              key={mode}
-              onClick={() => setSortMode(mode)}
+              key={sm}
+              onClick={() => setSortMode(sm)}
               className={`px-2 py-1 rounded transition-colors ${
-                sortMode === mode
+                sortMode === sm
                   ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                   : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
               }`}
             >
-              {mode === "scheduled" ? "Scheduled" : "Deadline"}
+              {sm === "scheduled" ? "Scheduled" : "Deadline"}
             </button>
           ))}
         </div>
@@ -206,7 +218,7 @@ export default function SprintsPage() {
           const color = SPRINT_COLORS[sprint];
 
           return (
-            <div key={sprint} className="rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
+            <div key={sprint} className={`rounded-xl border ${cardCls}`}>
               {/* Sprint header */}
               <div className="flex items-center justify-between px-4 pt-4 pb-3">
                 <div className="flex items-center gap-2">
@@ -301,6 +313,22 @@ export default function SprintsPage() {
                               onChange={(e) => setEditEst(e.target.value)}
                               className="h-8 text-xs"
                             />
+                          </div>
+                          <div className="bg-stone-800 rounded-full p-0.5 flex gap-0.5 border border-stone-700 shrink-0 self-end mb-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditContext("PROFESSIONAL")}
+                              className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${editContext === "PROFESSIONAL" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+                            >
+                              💼 Pro
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditContext("PERSONAL")}
+                              className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${editContext === "PERSONAL" ? "bg-green-600 text-white" : "text-slate-400 hover:text-white"}`}
+                            >
+                              🌿 Home
+                            </button>
                           </div>
                           <div className="flex gap-2 justify-end flex-1 items-end pb-0.5">
                             <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>
