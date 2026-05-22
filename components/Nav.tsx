@@ -48,8 +48,8 @@ export function Nav() {
 
   useEffect(() => {
     const isDark =
-      localStorage.getItem("flow-theme") === "dark" ||
-      (!localStorage.getItem("flow-theme") &&
+      localStorage.getItem("grove-theme") === "dark" ||
+      (!localStorage.getItem("grove-theme") &&
         window.matchMedia("(prefers-color-scheme: dark)").matches);
     setDark(isDark);
     document.documentElement.classList.toggle("dark", isDark);
@@ -82,7 +82,7 @@ export function Nav() {
     const next = !dark;
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem("flow-theme", next ? "dark" : "light");
+    localStorage.setItem("grove-theme", next ? "dark" : "light");
   }
 
   async function signOut() {
@@ -95,7 +95,7 @@ export function Nav() {
     <nav className="flex items-center gap-1 px-4 h-[52px] bg-slate-900 dark:bg-zinc-900 border-b border-slate-800 dark:border-zinc-800 shrink-0">
       {/* Brand */}
       <span className="text-xs font-black tracking-[0.2em] text-white mr-5 shrink-0">
-        FLOW
+        Grove
       </span>
 
       {/* Nav links */}

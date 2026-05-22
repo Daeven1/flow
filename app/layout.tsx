@@ -11,12 +11,12 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "FLOW — MYP Design Teacher Productivity",
+  title: "Grove — MYP Design Teacher Productivity",
   description: "ADHD-friendly productivity app for MYP Design teachers",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "flow",
+    title: "Grove",
     statusBarStyle: "black-translucent",
   },
   icons: {
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Prevents flash of wrong theme on load */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var m=localStorage.getItem('flow-theme');if(m==='dark'||(!m&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()`,
+            __html: `(function(){try{var m=localStorage.getItem('grove-theme');if(m==='dark'||(!m&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()`,
           }}
         />
 

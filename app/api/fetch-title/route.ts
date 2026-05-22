@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; FlowApp/1.0)" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; GroveApp/1.0)" },
       redirect: "follow",
     });
     clearTimeout(timeout);

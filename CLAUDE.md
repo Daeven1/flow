@@ -1,10 +1,17 @@
-# FLOW — Claude Code Context
+# Grove — Claude Code Context
 
-**Obsidian vault for this project:** `/Users/drempel/Documents/Obsidian Vaults/Coding Projects`
+**Obsidian vault note:** `/Users/drempel/Documents/ObsidianVaults/Coding Projects/Coding Projects/Grove Productivity App.md`
+
+## End of session
+
+At the end of every session, update the Obsidian note above:
+1. In the **Current Status** section, tick off any tasks completed this session (change `- [ ]` to `- [x]`).
+2. Add a new dated entry to the **Work Log** section summarising what was built or changed — two to four bullet points, plain language, no jargon soup.
+3. If the overall status changed (e.g. a feature shipped), update the **Status** field in the Repo & Deploy table.
 
 ## What this app is
 
-FLOW is a personal productivity web app built for **David Rempel**, an MYP Design teacher. It is ADHD-friendly and teacher-specific. It is **not** a general-purpose task manager — every design decision is shaped around the rhythms of a school term: prep periods, work nights, sprint-based prioritisation, and MIS submission deadlines.
+Grove is a personal productivity web app built for **David Rempel**, an MYP Design teacher. It is ADHD-friendly and teacher-specific. It is **not** a general-purpose task manager — every design decision is shaped around the rhythms of a school term: prep periods, work nights, sprint-based prioritisation, and MIS submission deadlines.
 
 Deployed on Vercel. Auth via Supabase. Database is PostgreSQL via Prisma (hosted on Supabase). AI features via Anthropic SDK (user's own API key via env).
 
@@ -151,7 +158,7 @@ All API routes call `getUser()` from `lib/auth.ts` which reads the Supabase sess
 - `export const runtime = 'nodejs'` required on every API route (Prisma needs Node.js runtime)
 - Optimistic UI updates with rollback on error (pattern used in drag-reorder and toggle active)
 - No global state library — all state is local React + fetch on change
-- Dark mode via `localStorage` key `flow-theme` + `document.documentElement.classList`
+- Dark mode via `localStorage` key `grove-theme` + `document.documentElement.classList`
 - Dates stored as UTC in DB; displayed with `date-fns` using local time
 - `sortOrder` fields on Projects and TemplateTask support drag-to-reorder
 

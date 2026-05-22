@@ -517,13 +517,13 @@ export default function DailyPage() {
         )}
       </div>
 
-      {/* ── ⚡ AUTO-ESCALATED: Due very soon ── */}
+      {/* ── 🍇 TODAY'S FORAGE ── */}
       {urgentDisplayed.length > 0 && (
-        <div className="rounded border-2 border-red-300 dark:border-red-800 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800">
-            <Zap className="h-4 w-4 text-red-500" />
-            <span className="font-medium text-sm text-red-700 dark:text-red-400">Due Very Soon</span>
-            <span className="text-xs text-red-500 ml-1">
+        <div className="rounded border-2 border-purple-300 dark:border-purple-800 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-purple-50 dark:bg-purple-950 border-b border-purple-200 dark:border-purple-800">
+            <Zap className="h-4 w-4 text-purple-500" />
+            <span className="font-medium text-sm text-purple-700 dark:text-purple-400">Today's Forage</span>
+            <span className="text-xs text-purple-500 ml-1">
               — these tasks need attention today regardless of sprint
             </span>
           </div>
@@ -531,7 +531,7 @@ export default function DailyPage() {
             <Droppable droppableId="urgent-now">
               {(provided) => (
                 <div
-                  className="divide-y divide-red-100 dark:divide-red-900"
+                  className="divide-y divide-purple-100 dark:divide-purple-900"
                   ref={provided.innerRef}
                   {...provided.droppableProps}
                 >
@@ -548,7 +548,7 @@ export default function DailyPage() {
                             style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}`, ...provided.draggableProps.style }}
                           >
                             {editingUrgentId === task.id ? (
-                              <div className="px-4 py-3 space-y-2 bg-red-50 dark:bg-red-950">
+                              <div className="px-4 py-3 space-y-2 bg-purple-50 dark:bg-purple-950">
                                 <Input
                                   value={editUrgentName}
                                   onChange={(e) => setEditUrgentName(e.target.value)}
@@ -597,12 +597,12 @@ export default function DailyPage() {
                               <div className="flex items-center gap-3 px-4 py-2.5 group">
                                 <span
                                   {...provided.dragHandleProps}
-                                  className="text-red-200 dark:text-red-900 cursor-grab active:cursor-grabbing shrink-0"
+                                  className="text-purple-200 dark:text-purple-900 cursor-grab active:cursor-grabbing shrink-0"
                                 >
                                   <GripVertical className="h-4 w-4" />
                                 </span>
                                 <button onClick={() => toggleTask(task.id, true)}>
-                                  <Circle className="h-4 w-4 text-red-300 hover:text-green-500 transition-colors" />
+                                  <Circle className="h-4 w-4 text-purple-300 hover:text-green-500 transition-colors" />
                                 </button>
                                 <span className="flex-1 text-sm font-medium">{task.name}</span>
                                 {task.workCategory === "GRADING" && (
@@ -612,8 +612,8 @@ export default function DailyPage() {
                                   <span className="text-xs text-slate-400 dark:text-zinc-500 hidden sm:block shrink-0">{task.project.name}</span>
                                 )}
                                 <span className={`text-xs font-semibold shrink-0 ${
-                                  daysLeft !== null && daysLeft < 0 ? "text-red-600" :
-                                  daysLeft === 0 ? "text-red-600" : "text-amber-600"
+                                  daysLeft !== null && daysLeft < 0 ? "text-purple-600" :
+                                  daysLeft === 0 ? "text-purple-600" : "text-amber-600"
                                 }`}>
                                   {daysLeft === null ? "" :
                                    daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` :
@@ -624,7 +624,7 @@ export default function DailyPage() {
                                 <span className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
                                 <button
                                   onClick={() => startEditUrgent(task)}
-                                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-300 hover:text-red-600 transition-colors shrink-0"
+                                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900 text-purple-300 hover:text-purple-600 transition-colors shrink-0"
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
                                 </button>

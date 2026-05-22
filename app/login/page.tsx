@@ -24,7 +24,7 @@ export default function LoginPage() {
       <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-10 w-full max-w-sm shadow-sm">
         <div className="mb-8 text-center">
           <div className="text-xs font-black tracking-[0.2em] text-slate-900 dark:text-white mb-1">
-            FLOW
+            Grove
           </div>
           <p className="text-sm text-slate-500 dark:text-zinc-400">
             MYP Design Teacher Productivity

@@ -1,6 +1,6 @@
 {
-  "name": "flow",
-  "short_name": "flow",
+  "name": "Grove",
+  "short_name": "Grove",
   "description": "Personal task and project manager",
   "start_url": "/daily",
   "display": "standalone",
