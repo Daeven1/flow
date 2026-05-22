@@ -122,7 +122,12 @@ export default function DailyPage() {
   const [enrichedLinks, setEnrichedLinks] = useState<{ url: string; title: string | null }[]>([]);
   const [gainInput, setGainInput] = useState("");
   const [addingToGain, setAddingToGain] = useState(false);
-  const [urgentCustomOrder, setUrgentCustomOrder] = useState<string[]>([]);
+  const [urgentCustomOrder, setUrgentCustomOrder] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    const stored = localStorage.getItem(`grove-forage-order-${format(startOfDay(new Date()), "yyyy-MM-dd")}`);
+    if (stored) { try { return JSON.parse(stored); } catch { /* ignore corrupt data */ } }
+    return [];
+  });
   const [editingUrgentId, setEditingUrgentId] = useState<string | null>(null);
   const [editUrgentName, setEditUrgentName] = useState("");
   const [editUrgentSprint, setEditUrgentSprint] = useState("1");
@@ -277,6 +282,7 @@ export default function DailyPage() {
       const next = [...prev];
       const [moved] = next.splice(result.source.index, 1);
       next.splice(result.destination!.index, 0, moved);
+      localStorage.setItem(`grove-forage-order-${todayStr}`, JSON.stringify(next));
       return next;
     });
   }
