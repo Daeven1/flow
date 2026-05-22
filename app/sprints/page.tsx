@@ -45,7 +45,7 @@ export default function SprintsPage() {
   const headingCls = mode === "PERSONAL" ? "text-lime-900" : "text-slate-900 dark:text-white";
   const mutedCls   = mode === "PERSONAL" ? "text-yellow-700" : "text-zinc-500 dark:text-zinc-400";
   const cardCls    = mode === "PERSONAL"
-    ? "bg-white border-yellow-200"
+    ? "bg-white dark:bg-zinc-900 border-yellow-200 dark:border-yellow-900"
     : "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800";
 
   const [tasks, setTasks] = useState<Task[]>([]);
