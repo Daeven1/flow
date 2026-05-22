@@ -27,3 +27,8 @@
     background: #27272a;
   }
 }
+
+/* Personal mode (Sunny Garden) overrides */
+.personal-mode body {
+  background-color: rgb(254 252 232); /* yellow-50 */
+}
