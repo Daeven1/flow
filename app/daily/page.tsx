@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useModeContext, type Mode } from "@/components/ModeProvider";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,7 @@ interface Task {
   deadline: string | null;
   scheduledDate: string | null;
   workCategory: string;
+  context: string;
   project: { id: string; name: string } | null;
 }
 
@@ -106,6 +108,13 @@ function extractUrls(text: string): string[] {
 
 export default function DailyPage() {
   const todayStr = format(startOfDay(new Date()), "yyyy-MM-dd");
+  const { mode } = useModeContext();
+
+  const headingCls = mode === "PERSONAL" ? "text-lime-900" : "text-slate-900 dark:text-white";
+  const mutedCls   = mode === "PERSONAL" ? "text-yellow-700" : "text-zinc-500 dark:text-zinc-400";
+  const cardCls    = mode === "PERSONAL"
+    ? "bg-white border-yellow-200"
+    : "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800";
 
   const [log, setLog] = useState<DailyLog>({
     highlight: "",
@@ -133,17 +142,18 @@ export default function DailyPage() {
   const [editUrgentSprint, setEditUrgentSprint] = useState("1");
   const [editUrgentDeadline, setEditUrgentDeadline] = useState("");
   const [editUrgentEst, setEditUrgentEst] = useState("30");
+  const [editUrgentContext, setEditUrgentContext] = useState<Mode>("PROFESSIONAL");
 
   const loadData = useCallback(async () => {
     const [logRes, tasksRes] = await Promise.all([
       fetch(`/api/daily?date=${todayStr}`),
-      fetch("/api/tasks"),
+      fetch(`/api/tasks?context=${mode}`),
     ]);
     const logData = await logRes.json();
     const tasksData = await tasksRes.json();
     if (logData) setLog(logData);
     setTasks(tasksData);
-  }, [todayStr]);
+  }, [todayStr, mode]);
 
   useEffect(() => {
     loadData();
@@ -216,7 +226,7 @@ export default function DailyPage() {
         fetch("/api/tasks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: t.name, sprint: t.sprint, estMinutes: t.estMinutes, workCategory: t.workCategory ?? "STANDARD", deadline: t.deadline || null }),
+          body: JSON.stringify({ name: t.name, sprint: t.sprint, estMinutes: t.estMinutes, workCategory: t.workCategory ?? "STANDARD", deadline: t.deadline || null, context: mode }),
         })
       )
     );
@@ -268,7 +278,7 @@ export default function DailyPage() {
       await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, sprint: 1, estMinutes: 30, workCategory: "STANDARD", done: true }),
+        body: JSON.stringify({ name, sprint: 1, estMinutes: 30, workCategory: "STANDARD", done: true, context: mode }),
       });
       loadData();
     } finally {
@@ -293,6 +303,7 @@ export default function DailyPage() {
     setEditUrgentSprint(String(task.sprint));
     setEditUrgentDeadline(task.deadline ? task.deadline.slice(0, 10) : "");
     setEditUrgentEst(String(task.estMinutes));
+    setEditUrgentContext((task.context as Mode) ?? "PROFESSIONAL");
   }
 
   async function saveEditUrgent(taskId: string) {
@@ -304,6 +315,7 @@ export default function DailyPage() {
         sprint: parseInt(editUrgentSprint),
         deadline: editUrgentDeadline || null,
         estMinutes: parseInt(editUrgentEst),
+        context: editUrgentContext,
       }),
     });
     if (!res.ok) return;
@@ -399,10 +411,10 @@ export default function DailyPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+        <h1 className={`text-xl font-bold ${headingCls}`}>
           {format(new Date(), "EEEE, d MMMM")}
         </h1>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Your command centre for today — what&apos;s due, what&apos;s done, and what&apos;s coming up.</p>
+        <p className={`text-xs ${mutedCls} mt-0.5`}>Your command centre for today — what&apos;s due, what&apos;s done, and what&apos;s coming up.</p>
       </div>
 
       {/* ── Stats row ── */}
@@ -418,7 +430,7 @@ export default function DailyPage() {
             className={`rounded-xl border p-4 ${
               accent
                 ? "border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950"
-                : "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800"
+                : cardCls
             }`}
           >
             <div className="text-xs text-slate-400 dark:text-zinc-500 mb-1">{label}</div>
@@ -431,7 +443,7 @@ export default function DailyPage() {
       </div>
 
       {/* ── THE GAIN — Did List ── */}
-      <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+      <div className={`rounded-xl border ${cardCls} overflow-hidden`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-zinc-800 border-b border-slate-200 dark:border-zinc-800">
           <div className="flex items-center gap-2">
@@ -589,6 +601,22 @@ export default function DailyPage() {
                                     className="h-8 text-xs w-24"
                                     placeholder="Est. mins"
                                   />
+                                  <div className="bg-stone-800 rounded-full p-0.5 flex gap-0.5 border border-stone-700 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditUrgentContext("PROFESSIONAL")}
+                                      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${editUrgentContext === "PROFESSIONAL" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+                                    >
+                                      💼 Pro
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditUrgentContext("PERSONAL")}
+                                      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${editUrgentContext === "PERSONAL" ? "bg-green-600 text-white" : "text-slate-400 hover:text-white"}`}
+                                    >
+                                      🌿 Home
+                                    </button>
+                                  </div>
                                   <div className="flex gap-2 ml-auto">
                                     <Button variant="ghost" size="sm" onClick={() => setEditingUrgentId(null)}>
                                       <X className="h-3.5 w-3.5 mr-1" /> Cancel
@@ -764,9 +792,9 @@ export default function DailyPage() {
 
       {/* ── Today's scheduled work ── */}
       <div className="space-y-3">
-        <h2 className="font-bold text-sm text-slate-900 dark:text-white">Today&apos;s Work</h2>
+        <h2 className={`font-bold text-sm ${headingCls}`}>Today&apos;s Work</h2>
         {todaysBySprint.length === 0 && urgentNow.length === 0 ? (
-          <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 text-center text-sm text-slate-400 dark:text-zinc-500">
+          <div className={`rounded-xl border ${cardCls} p-6 text-center text-sm text-slate-400 dark:text-zinc-500`}>
             Nothing scheduled for today. Check Sprints or add via Fertile Ground above.
           </div>
         ) : todaysBySprint.length === 0 ? null : (
@@ -775,7 +803,7 @@ export default function DailyPage() {
               const color = SPRINT_COLORS[sprint];
               const sprintMins = sprintTasks.reduce((s, t) => s + t.estMinutes, 0);
               return (
-                <div key={sprint} className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                <div key={sprint} className={`rounded-xl border ${cardCls}`}>
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
@@ -816,7 +844,7 @@ export default function DailyPage() {
       {/* ── Today's Highlight + Micro-commitment ── */}
       <div className="grid md:grid-cols-2 gap-6">
         <div className="space-y-3">
-          <h2 className="font-bold text-sm text-slate-900 dark:text-white">Today&apos;s Highlight</h2>
+          <h2 className={`font-bold text-sm ${headingCls}`}>Today&apos;s Highlight</h2>
           <p className="text-xs text-slate-500 dark:text-zinc-400">The ONE thing that would make today a win.</p>
           <Select
             value={log.highlight || ""}
@@ -858,7 +886,7 @@ export default function DailyPage() {
         </div>
 
         <div className="space-y-3">
-          <h2 className="font-bold text-sm text-slate-900 dark:text-white">Micro-commitment</h2>
+          <h2 className={`font-bold text-sm ${headingCls}`}>Micro-commitment</h2>
           <p className="text-xs text-slate-500 dark:text-zinc-400">The smallest next action you can definitely do.</p>
           <Input
             placeholder="e.g. Open feedback doc and write first comment"
@@ -885,7 +913,7 @@ export default function DailyPage() {
       {/* ── Coming Up ── */}
       {upcoming.length > 0 && (
         <div className="space-y-2">
-          <h2 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+          <h2 className={`font-bold text-sm ${headingCls} flex items-center gap-1.5`}>
             <CalendarClock className="h-3.5 w-3.5 text-slate-400 dark:text-zinc-500" />
             Coming Up
           </h2>
