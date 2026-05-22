@@ -649,12 +649,125 @@ export default function DailyPage() {
         </div>
       )}
 
+      {/* ── Fertile Ground ── */}
+      <div className="rounded-xl bg-stone-900 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-sm text-stone-300">🌱 Fertile Ground</h2>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Drop seeds here. One thought per line or free-write.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={parseBrainDump}
+            disabled={parsing || !log.brainDump.trim()}
+            className="border-stone-700 text-stone-300 hover:bg-stone-800 bg-transparent"
+          >
+            {parsing ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Convert to tasks ↗
+          </Button>
+        </div>
+        <Textarea
+          rows={5}
+          placeholder="Mark feedback for Year 10, email HOD about field trip, prep Tuesday practical…"
+          value={log.brainDump}
+          onChange={(e) => setLog({ ...log, brainDump: e.target.value })}
+          onBlur={() => saveLog({ brainDump: log.brainDump })}
+          className="bg-stone-950 text-stone-200 placeholder:text-stone-600 border-stone-700 resize-none"
+        />
+      </div>
+
+      {/* Parsed tasks */}
+      {parsedTasks.length > 0 && (
+        <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium text-sm">
+              AI found {parsedTasks.length} task{parsedTasks.length !== 1 ? "s" : ""}
+            </h3>
+            {enrichedLinks.length > 0 && (
+              <div className="rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-100 dark:border-blue-900 px-3 py-2">
+                <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">Links detected</p>
+                <div className="space-y-1">
+                  {enrichedLinks.map(({ url, title }) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-xs text-blue-600 dark:text-blue-400 hover:underline truncate"
+                    >
+                      {title ?? url}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setParsedTasks([])}>Cancel</Button>
+              <Button size="sm" onClick={saveSelectedTasks} disabled={saving || parsedTasks.every((t) => !t.selected)}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                Add selected
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {parsedTasks.map((task, i) => {
+              function update(patch: Partial<ParsedTask>) {
+                const next = [...parsedTasks];
+                next[i] = { ...task, ...patch };
+                setParsedTasks(next);
+              }
+              return (
+                <div key={i} className={`rounded-lg border p-3 space-y-2 transition-colors ${task.selected ? "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/50" : "border-transparent opacity-50"}`}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={task.selected}
+                      onChange={(e) => update({ selected: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span className="flex-1 text-sm font-medium">{task.name}</span>
+                    <span className="text-slate-400 dark:text-zinc-500 text-xs shrink-0">{formatMinutes(task.estMinutes)}</span>
+                  </label>
+                  {task.selected && (
+                    <div className="flex items-center gap-2 pl-5">
+                      <Select value={String(task.sprint)} onValueChange={(v) => update({ sprint: parseInt(v) })}>
+                        <SelectTrigger className="h-7 text-xs w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4].map((s) => (
+                            <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="date"
+                        value={task.deadline}
+                        onChange={(e) => update({ deadline: e.target.value })}
+                        className="h-7 text-xs w-36"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Today's scheduled work ── */}
       <div className="space-y-3">
         <h2 className="font-bold text-sm text-slate-900 dark:text-white">Today&apos;s Work</h2>
         {todaysBySprint.length === 0 && urgentNow.length === 0 ? (
           <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 text-center text-sm text-slate-400 dark:text-zinc-500">
-            Nothing scheduled for today. Check Sprints or use Brain Dump below.
+            Nothing scheduled for today. Check Sprints or add via Fertile Ground above.
           </div>
         ) : todaysBySprint.length === 0 ? null : (
           <div className="space-y-3">
@@ -768,117 +881,6 @@ export default function DailyPage() {
           </button>
         </div>
       </div>
-
-      {/* ── Brain Dump ── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-bold text-sm text-slate-900 dark:text-white">Brain Dump</h2>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-              Get it out of your head. One thought per line or just free-write.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={parseBrainDump}
-            disabled={parsing || !log.brainDump.trim()}
-          >
-            {parsing ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-            )}
-            Convert to tasks ↗
-          </Button>
-        </div>
-        <Textarea
-          rows={5}
-          placeholder="Mark feedback for Year 10, email HOD about field trip, prep materials for Tuesday practical…"
-          value={log.brainDump}
-          onChange={(e) => setLog({ ...log, brainDump: e.target.value })}
-          onBlur={() => saveLog({ brainDump: log.brainDump })}
-        />
-      </div>
-
-      {/* Parsed tasks */}
-      {parsedTasks.length > 0 && (
-        <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-medium text-sm">
-              AI found {parsedTasks.length} task{parsedTasks.length !== 1 ? "s" : ""}
-            </h3>
-            {enrichedLinks.length > 0 && (
-              <div className="rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-100 dark:border-blue-900 px-3 py-2">
-                <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">Links detected</p>
-                <div className="space-y-1">
-                  {enrichedLinks.map(({ url, title }) => (
-                    <a
-                      key={url}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block text-xs text-blue-600 dark:text-blue-400 hover:underline truncate"
-                    >
-                      {title ?? url}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setParsedTasks([])}>Cancel</Button>
-              <Button size="sm" onClick={saveSelectedTasks} disabled={saving || parsedTasks.every((t) => !t.selected)}>
-                {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-                Add selected
-              </Button>
-            </div>
-          </div>
-          <div className="space-y-2">
-            {parsedTasks.map((task, i) => {
-              function update(patch: Partial<ParsedTask>) {
-                const next = [...parsedTasks];
-                next[i] = { ...task, ...patch };
-                setParsedTasks(next);
-              }
-              return (
-                <div key={i} className={`rounded-lg border p-3 space-y-2 transition-colors ${task.selected ? "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/50" : "border-transparent opacity-50"}`}>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={task.selected}
-                      onChange={(e) => update({ selected: e.target.checked })}
-                      className="rounded"
-                    />
-                    <span className="flex-1 text-sm font-medium">{task.name}</span>
-                    <span className="text-slate-400 dark:text-zinc-500 text-xs shrink-0">{formatMinutes(task.estMinutes)}</span>
-                  </label>
-                  {task.selected && (
-                    <div className="flex items-center gap-2 pl-5">
-                      <Select value={String(task.sprint)} onValueChange={(v) => update({ sprint: parseInt(v) })}>
-                        <SelectTrigger className="h-7 text-xs w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[1, 2, 3, 4].map((s) => (
-                            <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="date"
-                        value={task.deadline}
-                        onChange={(e) => update({ deadline: e.target.value })}
-                        className="h-7 text-xs w-36"
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* ── Coming Up ── */}
       {upcoming.length > 0 && (
