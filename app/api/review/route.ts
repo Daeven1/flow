@@ -11,13 +11,14 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const weeksBack = parseInt(searchParams.get("weeks") || "1");
+  const context = searchParams.get("context");
 
   const now = new Date();
   const weekStart = startOfWeek(subWeeks(now, weeksBack - 1), { weekStartsOn: 1 });
   const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
 
   const doneTasks = await prisma.task.findMany({
-    where: { userId, done: true, doneAt: { gte: weekStart, lte: weekEnd } },
+    where: { userId, done: true, doneAt: { gte: weekStart, lte: weekEnd }, ...(context ? { context } : {}) },
   });
 
   const timeLogs = await prisma.timeLog.findMany({

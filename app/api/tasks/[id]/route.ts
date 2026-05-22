@@ -32,6 +32,7 @@ export async function PATCH(
   if ("actualMinutes" in body)
     data.actualMinutes = body.actualMinutes ? Number(body.actualMinutes) : null;
   if ("workCategory" in body) data.workCategory = body.workCategory;
+  if ("context" in body) data.context = body.context;
   if ("leadDays" in body) data.leadDays = Number(body.leadDays);
   if ("reminderId" in body) data.reminderId = body.reminderId ?? null;
 

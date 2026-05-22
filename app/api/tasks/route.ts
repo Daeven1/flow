@@ -6,14 +6,18 @@ import { computeScheduledDate } from "@/lib/utils";
 import { getUser } from "@/lib/auth";
 import { getWorkNightDays } from "@/lib/workNightDays";
 
-export async function GET() {
+export async function GET(req: Request) {
   const userId = await getUser();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const context = searchParams.get("context");
 
   const tasks = await prisma.task.findMany({
     where: {
       userId,
       OR: [{ projectId: null }, { showInRegular: true }],
+      ...(context ? { context } : {}),
     },
     include: { project: true },
     orderBy: { createdAt: "desc" },
@@ -34,7 +38,7 @@ export async function POST(req: Request) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { projectId, name, leadDays, deadline, workCategory, sprint, estMinutes } = body;
+  const { projectId, name, leadDays, deadline, workCategory, sprint, estMinutes, context } = body;
 
   let scheduledDate: Date | null = null;
   if (deadline) {
@@ -58,6 +62,7 @@ export async function POST(req: Request) {
       workCategory: workCategory ?? "STANDARD",
       sprint: Number(sprint),
       estMinutes: Number(estMinutes) || 30,
+      context: context ?? "PROFESSIONAL",
       ...(body.done ? { done: true, doneAt: new Date() } : {}),
     },
     include: { project: true },
