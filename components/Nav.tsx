@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useModeContext } from "./ModeProvider";
 
 const NAV_ITEMS = [
   { href: "/daily", label: "Daily", icon: CalendarDays },
@@ -85,6 +86,8 @@ export function Nav() {
     localStorage.setItem("grove-theme", next ? "dark" : "light");
   }
 
+  const { mode, setMode } = useModeContext();
+
   async function signOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -92,7 +95,12 @@ export function Nav() {
   }
 
   return (
-    <nav className="flex items-center gap-1 px-4 h-[52px] bg-slate-900 dark:bg-zinc-900 border-b border-slate-800 dark:border-zinc-800 shrink-0">
+    <nav className={cn(
+      "flex items-center gap-1 px-4 h-[52px] border-b shrink-0",
+      mode === "PERSONAL"
+        ? "bg-lime-950 border-lime-900"
+        : "bg-slate-900 dark:bg-zinc-900 border-slate-800 dark:border-zinc-800"
+    )}>
       {/* Brand */}
       <span className="text-xs font-black tracking-[0.2em] text-white mr-5 shrink-0">
         Grove
@@ -110,7 +118,9 @@ export function Nav() {
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0",
                 active
-                  ? "bg-slate-700 dark:bg-zinc-700 text-white"
+                  ? mode === "PERSONAL"
+                    ? "bg-green-800 text-white"
+                    : "bg-slate-700 dark:bg-zinc-700 text-white"
                   : "text-slate-400 hover:text-white hover:bg-slate-800 dark:hover:bg-zinc-800"
               )}
             >
@@ -119,6 +129,28 @@ export function Nav() {
             </Link>
           );
         })}
+      </div>
+
+      {/* Mode toggle */}
+      <div className="bg-slate-800 rounded-full p-0.5 flex gap-0.5 border border-slate-700 shrink-0 mx-2">
+        <button
+          onClick={() => setMode("PROFESSIONAL")}
+          className={cn(
+            "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+            mode === "PROFESSIONAL" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"
+          )}
+        >
+          💼 Pro
+        </button>
+        <button
+          onClick={() => setMode("PERSONAL")}
+          className={cn(
+            "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+            mode === "PERSONAL" ? "bg-green-600 text-white" : "text-slate-400 hover:text-white"
+          )}
+        >
+          🌿 Home
+        </button>
       </div>
 
       {/* Right side controls */}
