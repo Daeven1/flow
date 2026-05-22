@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useModeContext } from "@/components/ModeProvider";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SprintBadge } from "@/components/SprintBadge";
@@ -44,15 +45,16 @@ interface ReviewData {
 }
 
 export default function ReviewPage() {
+  const { mode } = useModeContext();
   const [data, setData] = useState<ReviewData | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/review?weeks=1");
+    const res = await fetch(`/api/review?weeks=1&context=${mode}`);
     setData(await res.json());
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     load();

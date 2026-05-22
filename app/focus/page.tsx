@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useModeContext } from "@/components/ModeProvider";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { GripVertical } from "lucide-react";
 import { StickyPile } from "@/components/StickyPile";
@@ -16,20 +17,21 @@ type Task = {
 };
 
 export default function FocusPage() {
+  const { mode } = useModeContext();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [queue, setQueue] = useState<string[]>([]);
   const [session, setSession] = useState<Task[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/tasks")
+    fetch(`/api/tasks?context=${mode}`)
       .then((r) => r.json())
       .then((data: Task[]) => {
         setTasks(data.filter((t) => !t.done));
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [mode]);
 
   function toggle(id: string) {
     setQueue((prev) =>

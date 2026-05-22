@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useModeContext } from "@/components/ModeProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SprintBadge } from "@/components/SprintBadge";
@@ -33,6 +34,7 @@ interface TimeLog {
 }
 
 export default function TimePage() {
+  const { mode } = useModeContext();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [, setLogs] = useState<TimeLog[]>([]);
   const [selectedTask, setSelectedTask] = useState("");
@@ -40,12 +42,12 @@ export default function TimePage() {
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const [tasksRes] = await Promise.all([fetch("/api/tasks")]);
+    const [tasksRes] = await Promise.all([fetch(`/api/tasks?context=${mode}`)]);
     const tasksData: Task[] = await tasksRes.json();
     setTasks(tasksData);
 
     setLogs([]);
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     load();
