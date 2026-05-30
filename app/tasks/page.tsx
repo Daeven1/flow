@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SPRINT_LABELS, SPRINT_COLORS, formatMinutes, formatRelativeDate, urgencySort } from "@/lib/utils";
-import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, Star } from "lucide-react";
+import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, Star, RefreshCw, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { parseISO, startOfDay } from "date-fns";
 
 type FilterMode = "all" | "1" | "2" | "3" | "4" | "done";
@@ -39,6 +39,22 @@ interface Task {
   workCategory: string;
   context: string;
   project: { id: string; name: string } | null;
+}
+
+type RecurrenceType = "DAILY" | "WEEKLY" | "MONTHLY";
+
+interface RecurringTask {
+  id: string;
+  name: string;
+  sprint: number;
+  estMinutes: number;
+  workCategory: string;
+  context: string;
+  recurrenceType: RecurrenceType;
+  recurrenceDays: string;
+  recurrenceMonthDay: number | null;
+  deadlineOffset: number;
+  active: boolean;
 }
 
 export default function TasksPage() {
@@ -71,13 +87,32 @@ export default function TasksPage() {
   const [editCategory, setEditCategory] = useState("STANDARD");
   const [editContext, setEditContext] = useState<Mode>("PROFESSIONAL");
 
+  const [recurringTasks, setRecurringTasks] = useState<RecurringTask[]>([]);
+  const [showRecurring, setShowRecurring] = useState(false);
+  const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
+  const [showRecurringForm, setShowRecurringForm] = useState(false);
+
+  // Recurring form state
+  const [rName, setRName] = useState("");
+  const [rType, setRType] = useState<RecurrenceType>("WEEKLY");
+  const [rDays, setRDays] = useState<number[]>([1]);
+  const [rMonthDay, setRMonthDay] = useState(1);
+  const [rSprint, setRSprint] = useState("1");
+  const [rEst, setREst] = useState("30");
+  const [rCategory, setRCategory] = useState("STANDARD");
+  const [rContext, setRContext] = useState<Mode>("PROFESSIONAL");
+  const [rDeadlineOffset, setRDeadlineOffset] = useState(0);
+
   const load = useCallback(async () => {
-    const [tasksRes, presetsRes] = await Promise.all([
+    await fetch("/api/recurring/spawn", { method: "POST" });
+    const [tasksRes, presetsRes, recurringRes] = await Promise.all([
       fetch(`/api/tasks?context=${mode}`),
       fetch("/api/presets"),
+      fetch("/api/recurring"),
     ]);
     setTasks(await tasksRes.json());
     setPresets(await presetsRes.json());
+    setRecurringTasks(await recurringRes.json());
   }, [mode]);
 
   useEffect(() => {
@@ -145,6 +180,83 @@ export default function TasksPage() {
     setEditEst(String(task.estMinutes));
     setEditCategory(task.workCategory);
     setEditContext((task.context as Mode) ?? "PROFESSIONAL");
+  }
+
+  function formatPattern(rt: RecurringTask): string {
+    if (rt.recurrenceType === "DAILY") return "Every day";
+    if (rt.recurrenceType === "MONTHLY") {
+      const n = rt.recurrenceMonthDay ?? 1;
+      const s = ["th", "st", "nd", "rd"];
+      const v = n % 100;
+      const suffix = s[(v - 20) % 10] ?? s[v] ?? s[0];
+      return `${n}${suffix} of month`;
+    }
+    const days: number[] = JSON.parse(rt.recurrenceDays || "[]");
+    const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return "Every " + days.map((d) => names[d]).join(", ");
+  }
+
+  function resetRecurringForm() {
+    setRName(""); setRType("WEEKLY"); setRDays([1]); setRMonthDay(1);
+    setRSprint("1"); setREst("30"); setRCategory("STANDARD");
+    setRContext("PROFESSIONAL"); setRDeadlineOffset(0);
+  }
+
+  function populateRecurringForm(rt: RecurringTask) {
+    setRName(rt.name);
+    setRType(rt.recurrenceType);
+    setRDays(JSON.parse(rt.recurrenceDays || "[]"));
+    setRMonthDay(rt.recurrenceMonthDay ?? 1);
+    setRSprint(String(rt.sprint));
+    setREst(String(rt.estMinutes));
+    setRCategory(rt.workCategory);
+    setRContext(rt.context as Mode);
+    setRDeadlineOffset(rt.deadlineOffset);
+  }
+
+  async function saveRecurring() {
+    const body = {
+      name: rName,
+      sprint: rSprint,
+      estMinutes: rEst,
+      workCategory: rCategory,
+      context: rContext,
+      recurrenceType: rType,
+      recurrenceDays: JSON.stringify(rType === "WEEKLY" ? rDays : []),
+      recurrenceMonthDay: rType === "MONTHLY" ? rMonthDay : null,
+      deadlineOffset: rDeadlineOffset,
+    };
+    if (editingRecurringId) {
+      await fetch(`/api/recurring/${editingRecurringId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      setEditingRecurringId(null);
+    } else {
+      await fetch("/api/recurring", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      setShowRecurringForm(false);
+    }
+    resetRecurringForm();
+    load();
+  }
+
+  async function toggleRecurringActive(id: string, active: boolean) {
+    await fetch(`/api/recurring/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active }),
+    });
+    setRecurringTasks((prev) => prev.map((r) => r.id === id ? { ...r, active } : r));
+  }
+
+  async function deleteRecurring(id: string) {
+    await fetch(`/api/recurring/${id}`, { method: "DELETE" });
+    setRecurringTasks((prev) => prev.filter((r) => r.id !== id));
   }
 
   async function saveEdit(id: string) {
@@ -438,6 +550,256 @@ export default function TasksPage() {
           )}
         </div>
       )}
+      {/* ── Recurring tasks ── */}
+      <div className={`rounded-xl border ${cardCls} overflow-hidden`}>
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors"
+          onClick={() => setShowRecurring((v) => !v)}
+        >
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-slate-400 dark:text-zinc-500" />
+            <span className="font-medium text-sm">Recurring</span>
+            {recurringTasks.length > 0 && (
+              <span className="text-xs bg-slate-200 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300 px-2 py-0.5 rounded-full">
+                {recurringTasks.filter((r) => r.active).length} active
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                resetRecurringForm();
+                setEditingRecurringId(null);
+                setShowRecurring(true);
+                setShowRecurringForm((v) => !v);
+              }}
+              className="flex items-center gap-1 text-xs text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200 px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-600 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" /> New
+            </button>
+            {showRecurring
+              ? <ChevronUp className="h-4 w-4 text-slate-400" />
+              : <ChevronDown className="h-4 w-4 text-slate-400" />}
+          </div>
+        </button>
+
+        {showRecurring && (
+          <div>
+            {/* New / Edit form */}
+            {(showRecurringForm || editingRecurringId) && (
+              <div className="px-4 py-3 bg-slate-50 dark:bg-zinc-800 border-b border-slate-200 dark:border-zinc-700 space-y-3">
+                <Input
+                  placeholder="Task name"
+                  value={rName}
+                  onChange={(e) => setRName(e.target.value)}
+                  className="text-sm"
+                  autoFocus
+                />
+                {/* Recurrence type selector */}
+                <div className="flex items-center gap-1 bg-slate-200 dark:bg-zinc-700 rounded-lg p-0.5 w-fit">
+                  {(["DAILY", "WEEKLY", "MONTHLY"] as RecurrenceType[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setRType(t)}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                        rType === t
+                          ? "bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-100 shadow-sm"
+                          : "text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-300"
+                      }`}
+                    >
+                      {t === "DAILY" ? "Daily" : t === "WEEKLY" ? "Weekly" : "Monthly"}
+                    </button>
+                  ))}
+                </div>
+                {/* Weekly day picker */}
+                {rType === "WEEKLY" && (
+                  <div className="flex gap-1">
+                    {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((label, i) => (
+                      <button
+                        key={i}
+                        onClick={() =>
+                          setRDays((prev) =>
+                            prev.includes(i)
+                              ? prev.filter((d) => d !== i)
+                              : [...prev, i].sort()
+                          )
+                        }
+                        className={`w-8 h-8 rounded-full text-xs font-medium transition-colors ${
+                          rDays.includes(i)
+                            ? "bg-slate-700 dark:bg-zinc-200 text-white dark:text-zinc-900"
+                            : "bg-slate-100 dark:bg-zinc-700 text-slate-500 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-600"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* Monthly day picker */}
+                {rType === "MONTHLY" && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 dark:text-zinc-400">Day of month:</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={rMonthDay}
+                      onChange={(e) => setRMonthDay(Number(e.target.value))}
+                      className="h-8 text-xs w-20"
+                    />
+                  </div>
+                )}
+                {/* Sprint, est, category, context */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={rSprint} onValueChange={setRSprint}>
+                    <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4].map((s) => (
+                        <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    min={5}
+                    step={5}
+                    value={rEst}
+                    onChange={(e) => setREst(e.target.value)}
+                    className="h-8 text-xs w-24"
+                    placeholder="Est. mins"
+                  />
+                  <div className="bg-stone-800 rounded-full p-0.5 flex gap-0.5 border border-stone-700">
+                    {(["STANDARD", "GRADING"] as const).map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setRCategory(cat)}
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
+                          rCategory === cat ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {cat === "STANDARD" ? "☀️ Day" : "🌙 Night"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="bg-stone-800 rounded-full p-0.5 flex gap-0.5 border border-stone-700">
+                    <button
+                      onClick={() => setRContext("PROFESSIONAL")}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${rContext === "PROFESSIONAL" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+                    >
+                      💼 Pro
+                    </button>
+                    <button
+                      onClick={() => setRContext("PERSONAL")}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${rContext === "PERSONAL" ? "bg-green-600 text-white" : "text-slate-400 hover:text-white"}`}
+                    >
+                      🌿 Home
+                    </button>
+                  </div>
+                </div>
+                {/* Deadline offset */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500 dark:text-zinc-400">Due:</span>
+                  <button
+                    onClick={() => setRDeadlineOffset(0)}
+                    className={`text-xs px-2 py-1 rounded border transition-colors ${
+                      rDeadlineOffset === 0
+                        ? "border-slate-400 bg-slate-100 dark:bg-zinc-700 dark:border-zinc-500 font-medium"
+                        : "border-transparent text-slate-400 hover:border-slate-200"
+                    }`}
+                  >
+                    Same day
+                  </button>
+                  <span className="text-xs text-slate-400">+</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={rDeadlineOffset > 0 ? rDeadlineOffset : ""}
+                    onChange={(e) => setRDeadlineOffset(Number(e.target.value))}
+                    placeholder="days"
+                    className="h-8 text-xs w-20"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowRecurringForm(false);
+                      setEditingRecurringId(null);
+                      resetRecurringForm();
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5 mr-1" /> Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={saveRecurring}
+                    disabled={!rName.trim() || (rType === "WEEKLY" && rDays.length === 0)}
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1" /> {editingRecurringId ? "Update" : "Add"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Template list */}
+            {recurringTasks.length === 0 && !showRecurringForm ? (
+              <p className="px-4 py-4 text-sm text-slate-400 dark:text-zinc-500 italic">
+                No recurring tasks yet. Click + New to add one.
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-zinc-800">
+                {recurringTasks.map((rt) => (
+                  <div
+                    key={rt.id}
+                    className={`flex items-center gap-3 px-4 py-2.5 group ${!rt.active ? "opacity-50" : ""}`}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5 text-slate-300 dark:text-zinc-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm">{rt.name}</span>
+                      <span className="ml-2 text-xs text-slate-400 dark:text-zinc-500">
+                        {formatPattern(rt)}
+                      </span>
+                    </div>
+                    <SprintBadge sprint={rt.sprint} size="sm" />
+                    <span className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">
+                      {formatMinutes(rt.estMinutes)}
+                    </span>
+                    <span className="text-xs text-slate-400 dark:text-zinc-500 shrink-0">
+                      {rt.deadlineOffset === 0 ? "same day" : `+${rt.deadlineOffset}d`}
+                    </span>
+                    <button
+                      onClick={() => toggleRecurringActive(rt.id, !rt.active)}
+                      className="shrink-0 text-xs px-2 py-0.5 rounded-full border transition-colors border-slate-200 dark:border-zinc-700 hover:border-slate-400 dark:hover:border-zinc-500"
+                      title={rt.active ? "Pause" : "Resume"}
+                    >
+                      {rt.active ? "active" : "paused"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        populateRecurringForm(rt);
+                        setEditingRecurringId(rt.id);
+                        setShowRecurringForm(false);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-300 transition-colors shrink-0"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => deleteRecurring(rt.id)}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-red-500 transition-colors shrink-0"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
