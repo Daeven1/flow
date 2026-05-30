@@ -40,10 +40,12 @@ model Task {
   sortOrder     Int       @default(0)
   done          Boolean   @default(false)
   doneAt        DateTime?
-  reminderId    String?
-  syncedFrom    String    @default("app")
-  createdAt     DateTime  @default(now())
-  timeLogs      TimeLog[]
+  reminderId      String?
+  syncedFrom      String    @default("app")
+  createdAt       DateTime  @default(now())
+  timeLogs        TimeLog[]
+  recurringTaskId String?
+  recurringTask   RecurringTask? @relation(fields: [recurringTaskId], references: [id], onDelete: SetNull)
 
   @@unique([userId, reminderId])
 }
@@ -62,6 +64,24 @@ model DailyLog {
   updatedAt       DateTime @updatedAt
 
   @@unique([userId, date])
+}
+
+model RecurringTask {
+  id                 String    @id @default(cuid())
+  userId             String
+  name               String
+  sprint             Int       @default(1)
+  estMinutes         Int       @default(30)
+  workCategory       String    @default("STANDARD")
+  context            String    @default("PROFESSIONAL")
+  recurrenceType     String    // "DAILY" | "WEEKLY" | "MONTHLY"
+  recurrenceDays     String    @default("[]")  // JSON int[] — day-of-week (0=Sun…6=Sat), WEEKLY only
+  recurrenceMonthDay Int?                       // 1–31, MONTHLY only
+  deadlineOffset     Int       @default(0)      // days after scheduledDate → deadline
+  active             Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  tasks              Task[]
 }
 
 model WeeklyLog {
