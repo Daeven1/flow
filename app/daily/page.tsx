@@ -142,6 +142,7 @@ export default function DailyPage() {
   const [editUrgentContext, setEditUrgentContext] = useState<Mode>("PROFESSIONAL");
 
   const loadData = useCallback(async () => {
+    await fetch("/api/recurring/spawn", { method: "POST" });
     const [logRes, tasksRes] = await Promise.all([
       fetch(`/api/daily?date=${todayStr}`),
       fetch(`/api/tasks?context=${mode}`),
