@@ -2,6 +2,10 @@
 
 **Obsidian vault note:** `/Users/drempel/Documents/ObsidianVaults/Coding Projects/Coding Projects/Grove Productivity App.md`
 
+## Implementation workflow
+
+When executing an implementation plan, always use the **subagent-driven development** approach (superpowers:subagent-driven-development skill). Dispatch a fresh subagent per task, review between tasks.
+
 ## End of session
 
 At the end of every session, update the Obsidian note above:
