@@ -27,8 +27,10 @@ export async function POST() {
     if (template.recurrenceType === "DAILY") {
       isRecurrenceDay = true;
     } else if (template.recurrenceType === "WEEKLY") {
-      const days: number[] = JSON.parse(template.recurrenceDays || "[]");
-      isRecurrenceDay = days.includes(dayOfWeek);
+      try {
+        const days: number[] = JSON.parse(template.recurrenceDays || "[]");
+        isRecurrenceDay = days.includes(dayOfWeek);
+      } catch { isRecurrenceDay = false; }
     } else if (template.recurrenceType === "MONTHLY") {
       const targetDay = template.recurrenceMonthDay ?? 1;
       const effectiveDay = Math.min(targetDay, lastDayOfMonth);
