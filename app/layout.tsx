@@ -8,7 +8,10 @@ import { Analytics } from "@vercel/analytics/next";
 const inter = Inter({ subsets: ["latin"] });
 
 export const viewport: Viewport = {
-  themeColor: "#1e293b",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#E0EFFE" },
+    { media: "(prefers-color-scheme: dark)", color: "#0D1B2E" },
+  ],
 };
 
 export const metadata: Metadata = {
@@ -43,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body
-        className={`${inter.className} bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 min-h-screen`}
+        className={`${inter.className} bg-[#E0EFFE] dark:bg-[#0D1B2E] text-slate-900 dark:text-zinc-100 min-h-screen`}
       >
         <ModeProvider>
           <Nav />
