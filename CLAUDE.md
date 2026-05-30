@@ -64,6 +64,9 @@ app/
     templates/    # Template CRUD + seeding defaults
     templates/[id]/
     presets/      # TaskPreset CRUD
+    recurring/    # RecurringTask GET + POST
+    recurring/[id]/  # RecurringTask PATCH + DELETE
+    recurring/spawn/ # POST — spawn today's instances (idempotent)
     ai/parse-braindump/  # Claude AI: parse free text → task JSON
     settings/     # UserSettings (workNightDays)
     timelogs/     # TimeLog records
@@ -93,9 +96,10 @@ components/
 
 ```
 Task          id, userId, projectId?, name, leadDays, deadline, scheduledDate,
-              workCategory (STANDARD|GRADING), sprint (1-4), estMinutes,
-              actualMinutes, pinned, showInRegular, sortOrder, done, doneAt,
-              reminderId, syncedFrom, timeLogs[]
+              workCategory (STANDARD|GRADING), context (PROFESSIONAL|PERSONAL),
+              sprint (1-4), estMinutes, actualMinutes, pinned, showInRegular,
+              sortOrder, done, doneAt, reminderId, syncedFrom,
+              recurringTaskId?, timeLogs[]
 
 Project       id, userId, name, deadline?, templateKey?, notes, sortOrder,
               active, tasks[]
@@ -106,8 +110,13 @@ TemplateTask  id, templateId, name, leadDays, sprint, estMinutes, workCategory, 
 TaskPreset    id, userId, name, sprint, estMinutes, workCategory, notes, sortOrder
               (Quick reusable task configs — shown in brain dump and add-task forms)
 
+RecurringTask id, userId, name, sprint, estMinutes, workCategory, context,
+              recurrenceType ("DAILY"|"WEEKLY"|"MONTHLY"), recurrenceDays (JSON int[]),
+              recurrenceMonthDay?, deadlineOffset, active, tasks[]
+              (Templates that auto-spawn a Task instance on each recurrence day)
+
 DailyLog      userId + date (unique), highlight, highlightDone, microCommitment,
-              microDone, brainDump
+              microDone, brainDump, forageOrder (JSON string[] of task IDs)
 
 WeeklyLog     userId + weekStart (unique), highlightsDone, microsDone
 TimeLog       taskId, taskName, sprint, estMinutes, actualMinutes, date
@@ -140,6 +149,12 @@ ReadItem      userId, title, genre, avgRating, authors, thumbnail, checked
 **Templates** seed on first login from `lib/templates.ts`. Tasks are generated when a project is created with both a `templateKey` AND a `deadline` (logic in `app/api/projects/route.ts` POST).
 
 **Task Presets** are user-defined quick configs (sprint, estMinutes, workCategory) shown in the Brain Dump confirm UI and the add-task form. They are matched by the AI but conservatively — only for unambiguous professional teaching tasks.
+
+**Recurring Tasks** are templates (`RecurringTask` model) that auto-spawn a `Task` instance each time their recurrence date arrives. Spawn is triggered by `POST /api/recurring/spawn`, which is called at the top of `loadData` on both `/daily` and `/tasks`. Spawn is idempotent — checks for an existing task with the same `recurringTaskId` and today's `scheduledDate` before creating. Deleting a template sets `recurringTaskId = null` on already-spawned tasks (onDelete: SetNull) — they become regular tasks.
+
+**App background** (as of 2026-05-30): light mode = Calm Pool (`#E0EFFE`), dark mode = Midnight Navy (`#0D1B2E`), set on `<body>` in `app/layout.tsx`. Personal mode override in `globals.css` uses a higher-specificity selector to win over the Tailwind class.
+
+**Daily page section order:** Date heading → Stats row → The Gain → Today's Forage → Fertile Ground → ☀️ Sunshine + 🌱 Sprout (grid) → Today's Work → Coming Up.
 
 ---
 
