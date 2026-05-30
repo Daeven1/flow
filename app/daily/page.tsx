@@ -794,6 +794,83 @@ export default function DailyPage() {
         </div>
       )}
 
+      {/* ── ☀️ Sunshine + 🌱 Sprout ── */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Sunshine */}
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-yellow-50 dark:bg-[#1c1a0f] p-4 space-y-3">
+          <div>
+            <h2 className="font-bold text-sm text-[#A16207] dark:text-amber-200">☀️ Sunshine</h2>
+            <p className="text-xs text-[#A16207]/80 dark:text-amber-200/70 mt-0.5">The ONE thing that would make today a win.</p>
+          </div>
+          <Select
+            value={log.highlight || ""}
+            onValueChange={(v) => saveLog({ highlight: v })}
+          >
+            <SelectTrigger className="text-sm border-amber-200 dark:border-amber-800 bg-white dark:bg-zinc-900">
+              <SelectValue placeholder="Pick a task as your sunshine…" />
+            </SelectTrigger>
+            <SelectContent>
+              {sortBySprintThenDeadline([...urgentNow, ...todaysTasks]).map((t) => (
+                <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
+              ))}
+              {sortBySprintThenDeadline(
+                openTasks.filter((t) => !urgentIds.has(t.id) && !todaysTasks.includes(t))
+              ).map((t) => (
+                <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            placeholder="Or type your own sunshine…"
+            value={log.highlight}
+            onChange={(e) => setLog({ ...log, highlight: e.target.value })}
+            onBlur={() => saveLog({ highlight: log.highlight })}
+            className="border-amber-200 dark:border-amber-800 bg-white dark:bg-zinc-900"
+          />
+          <button
+            onClick={() => saveLog({ highlightDone: !log.highlightDone })}
+            className="flex items-center gap-2 text-sm"
+          >
+            {log.highlightDone ? (
+              <CheckCircle2 className="h-5 w-5 text-amber-500" />
+            ) : (
+              <Circle className="h-5 w-5 text-amber-200 dark:text-amber-900" />
+            )}
+            <span className={log.highlightDone ? "line-through text-amber-400 dark:text-amber-700" : "text-[#A16207] dark:text-amber-200"}>
+              {log.highlight || "Set your sunshine above"}
+            </span>
+          </button>
+        </div>
+
+        {/* Sprout */}
+        <div className="rounded-xl border border-green-300 dark:border-green-800 bg-green-50 dark:bg-[#052e16] p-4 space-y-3">
+          <div>
+            <h2 className="font-bold text-sm text-green-800 dark:text-green-300">🌱 Sprout</h2>
+            <p className="text-xs text-green-800/70 dark:text-green-300/70 mt-0.5">The smallest next action you can start right now.</p>
+          </div>
+          <Input
+            placeholder="e.g. Open the feedback doc"
+            value={log.microCommitment}
+            onChange={(e) => setLog({ ...log, microCommitment: e.target.value })}
+            onBlur={() => saveLog({ microCommitment: log.microCommitment })}
+            className="border-green-300 dark:border-green-800 bg-white dark:bg-zinc-900"
+          />
+          <button
+            onClick={() => saveLog({ microDone: !log.microDone })}
+            className="flex items-center gap-2 text-sm"
+          >
+            {log.microDone ? (
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+            ) : (
+              <Circle className="h-5 w-5 text-green-300 dark:text-green-800" />
+            )}
+            <span className={log.microDone ? "line-through text-green-400 dark:text-green-700" : "text-green-800 dark:text-green-300"}>
+              {log.microCommitment || "Set your sprout above"}
+            </span>
+          </button>
+        </div>
+      </div>
+
       {/* ── Today's scheduled work ── */}
       <div className="space-y-3">
         <h2 className={`font-bold text-sm ${headingCls}`}>Today&apos;s Work</h2>
@@ -843,75 +920,6 @@ export default function DailyPage() {
             })}
           </div>
         )}
-      </div>
-
-      {/* ── Today's Highlight + Micro-commitment ── */}
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="space-y-3">
-          <h2 className={`font-bold text-sm ${headingCls}`}>Today&apos;s Highlight</h2>
-          <p className="text-xs text-slate-500 dark:text-zinc-400">The ONE thing that would make today a win.</p>
-          <Select
-            value={log.highlight || ""}
-            onValueChange={(v) => saveLog({ highlight: v })}
-          >
-            <SelectTrigger className="text-sm">
-              <SelectValue placeholder="Pick a task as your highlight…" />
-            </SelectTrigger>
-            <SelectContent>
-              {sortBySprintThenDeadline([...urgentNow, ...todaysTasks]).map((t) => (
-                <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
-              ))}
-              {sortBySprintThenDeadline(
-                openTasks.filter((t) => !urgentIds.has(t.id) && !todaysTasks.includes(t))
-              ).map((t) => (
-                  <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-          <Input
-            placeholder="Or type your own highlight…"
-            value={log.highlight}
-            onChange={(e) => setLog({ ...log, highlight: e.target.value })}
-            onBlur={() => saveLog({ highlight: log.highlight })}
-          />
-          <button
-            onClick={() => saveLog({ highlightDone: !log.highlightDone })}
-            className="flex items-center gap-2 text-sm"
-          >
-            {log.highlightDone ? (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-            ) : (
-              <Circle className="h-5 w-5 text-slate-300 dark:text-zinc-600" />
-            )}
-            <span className={log.highlightDone ? "line-through text-slate-400 dark:text-zinc-500" : ""}>
-              {log.highlight || "Set a highlight above"}
-            </span>
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          <h2 className={`font-bold text-sm ${headingCls}`}>Micro-commitment</h2>
-          <p className="text-xs text-slate-500 dark:text-zinc-400">The smallest next action you can definitely do.</p>
-          <Input
-            placeholder="e.g. Open feedback doc and write first comment"
-            value={log.microCommitment}
-            onChange={(e) => setLog({ ...log, microCommitment: e.target.value })}
-            onBlur={() => saveLog({ microCommitment: log.microCommitment })}
-          />
-          <button
-            onClick={() => saveLog({ microDone: !log.microDone })}
-            className="flex items-center gap-2 text-sm"
-          >
-            {log.microDone ? (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-            ) : (
-              <Circle className="h-5 w-5 text-slate-300 dark:text-zinc-600" />
-            )}
-            <span className={log.microDone ? "line-through text-slate-400 dark:text-zinc-500" : ""}>
-              {log.microCommitment || "Set your micro-commitment above"}
-            </span>
-          </button>
-        </div>
       </div>
 
       {/* ── Coming Up ── */}
