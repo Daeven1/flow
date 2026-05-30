@@ -164,6 +164,16 @@ All API routes call `getUser()` from `lib/auth.ts` which reads the Supabase sess
 
 ---
 
+## Supabase Compliance — Public Schema Grant Policy
+
+**Effective May 30, 2026 (new projects) / October 30, 2026 (all projects):** Supabase no longer exposes tables in the `public` schema to the Data API (PostgREST, GraphQL, supabase-js) by default.
+
+**This app is not affected for its data layer.** All database queries go through Prisma ORM over a direct PostgreSQL connection (`DATABASE_URL`), which bypasses the Supabase Data API (PostgREST) entirely. The grant changes are irrelevant to Prisma.
+
+Auth uses Supabase SSR (`@supabase/ssr`), which reads from the `auth` schema — also not affected by the `public` schema change.
+
+**However:** if any future feature ever reads `public` tables via `supabase-js` directly (e.g. a realtime subscription or a browser-side query), those tables would need an explicit grant. For now, no action required.
+
 ## Running locally
 
 ```bash

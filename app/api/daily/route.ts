@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { date, highlight, highlightDone, microCommitment, microDone, brainDump } = body;
+  const { date, highlight, highlightDone, microCommitment, microDone, brainDump, forageOrder } = body;
 
   const d = startOfDay(new Date(date || new Date()));
 
@@ -38,6 +38,7 @@ export async function POST(req: Request) {
       microCommitment: microCommitment ?? "",
       microDone: microDone ?? false,
       brainDump: brainDump ?? "",
+      forageOrder: forageOrder ?? "",
     },
     update: {
       ...(highlight !== undefined && { highlight }),
@@ -45,6 +46,7 @@ export async function POST(req: Request) {
       ...(microCommitment !== undefined && { microCommitment }),
       ...(microDone !== undefined && { microDone }),
       ...(brainDump !== undefined && { brainDump }),
+      ...(forageOrder !== undefined && { forageOrder }),
     },
   });
 

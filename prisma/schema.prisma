@@ -57,6 +57,7 @@ model DailyLog {
   microCommitment String   @default("")
   microDone       Boolean  @default(false)
   brainDump       String   @default("")
+  forageOrder     String   @default("")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

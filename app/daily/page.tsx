@@ -61,6 +61,7 @@ interface DailyLog {
   microCommitment: string;
   microDone: boolean;
   brainDump: string;
+  forageOrder: string;
 }
 
 interface ParsedTask {
@@ -122,6 +123,7 @@ export default function DailyPage() {
     microCommitment: "",
     microDone: false,
     brainDump: "",
+    forageOrder: "",
   });
   const [tasks, setTasks] = useState<Task[]>([]);
   const [parsedTasks, setParsedTasks] = useState<ParsedTask[]>([]);
@@ -131,12 +133,7 @@ export default function DailyPage() {
   const [enrichedLinks, setEnrichedLinks] = useState<{ url: string; title: string | null }[]>([]);
   const [gainInput, setGainInput] = useState("");
   const [addingToGain, setAddingToGain] = useState(false);
-  const [urgentCustomOrder, setUrgentCustomOrder] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    const stored = localStorage.getItem(`grove-forage-order-${format(startOfDay(new Date()), "yyyy-MM-dd")}`);
-    if (stored) { try { return JSON.parse(stored); } catch { /* ignore corrupt data */ } }
-    return [];
-  });
+  const [urgentCustomOrder, setUrgentCustomOrder] = useState<string[]>([]);
   const [editingUrgentId, setEditingUrgentId] = useState<string | null>(null);
   const [editUrgentName, setEditUrgentName] = useState("");
   const [editUrgentSprint, setEditUrgentSprint] = useState("1");
@@ -151,7 +148,12 @@ export default function DailyPage() {
     ]);
     const logData = await logRes.json();
     const tasksData = await tasksRes.json();
-    if (logData) setLog(logData);
+    if (logData) {
+      setLog(logData);
+      if (logData.forageOrder) {
+        try { setUrgentCustomOrder(JSON.parse(logData.forageOrder)); } catch { /* ignore corrupt data */ }
+      }
+    }
     setTasks(tasksData);
   }, [todayStr, mode]);
 
@@ -288,12 +290,14 @@ export default function DailyPage() {
 
   function handleUrgentDragEnd(result: DropResult) {
     if (!result.destination) return;
-    setUrgentCustomOrder((prev) => {
-      const next = [...prev];
-      const [moved] = next.splice(result.source.index, 1);
-      next.splice(result.destination!.index, 0, moved);
-      localStorage.setItem(`grove-forage-order-${todayStr}`, JSON.stringify(next));
-      return next;
+    const next = [...urgentCustomOrder];
+    const [moved] = next.splice(result.source.index, 1);
+    next.splice(result.destination.index, 0, moved);
+    setUrgentCustomOrder(next);
+    fetch("/api/daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayStr, forageOrder: JSON.stringify(next) }),
     });
   }
 
