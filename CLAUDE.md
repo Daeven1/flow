@@ -6,6 +6,8 @@
 
 When executing an implementation plan, always use the **subagent-driven development** approach (superpowers:subagent-driven-development skill). Dispatch a fresh subagent per task, review between tasks.
 
+**Never offer inline execution as an option.** When asked to execute a plan, go straight to subagent-driven without asking.
+
 ## End of session
 
 At the end of every session, update the Obsidian note above:
