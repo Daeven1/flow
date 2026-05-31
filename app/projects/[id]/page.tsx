@@ -13,7 +13,7 @@ import {
 import { formatMinutes, SPRINT_LABELS, formatRelativeDate } from "@/lib/utils";
 import {
   Plus, Trash2, CheckCircle2, Circle, Pencil, Check, X,
-  Moon, CalendarClock, Wand2, ChevronLeft, GripVertical, Globe,
+  Moon, CalendarClock, Wand2, ChevronLeft, GripVertical, Globe, ExternalLink,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { format } from "date-fns";
@@ -29,6 +29,7 @@ interface Task {
   workCategory: string;
   leadDays: number;
   showInRegular: boolean;
+  url: string | null;
 }
 
 interface Project {
@@ -75,6 +76,7 @@ export default function ProjectDetailPage() {
   const [editEst, setEditEst] = useState("30");
   const [editCategory, setEditCategory] = useState("STANDARD");
   const [editLeadDays, setEditLeadDays] = useState("0");
+  const [editUrl, setEditUrl] = useState("");
 
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskName, setNewTaskName] = useState("");
@@ -194,6 +196,7 @@ export default function ProjectDetailPage() {
     setEditEst(String(task.estMinutes));
     setEditCategory(task.workCategory);
     setEditLeadDays(String(task.leadDays));
+    setEditUrl(task.url ?? "");
   }
 
   async function saveEditTask(taskId: string) {
@@ -208,6 +211,7 @@ export default function ProjectDetailPage() {
         estMinutes: parseInt(editEst),
         workCategory: editCategory,
         leadDays: parseInt(editLeadDays),
+        url: editUrl.trim() || null,
       }),
     });
     setEditingTaskId(null);
@@ -472,14 +476,24 @@ export default function ProjectDetailPage() {
                             <label className="text-xs text-slate-500 dark:text-zinc-400">Est. mins</label>
                             <Input type="number" min="5" step="5" value={editEst} onChange={(e) => setEditEst(e.target.value)} className="h-8 text-xs" />
                           </div>
-                          <div className="flex gap-2 justify-end flex-1 items-end pb-0.5">
-                            <Button variant="ghost" size="sm" onClick={() => setEditingTaskId(null)}>
-                              <X className="h-3.5 w-3.5 mr-1" /> Cancel
-                            </Button>
-                            <Button size="sm" onClick={() => saveEditTask(task.id)}>
-                              <Check className="h-3.5 w-3.5 mr-1" /> Save
-                            </Button>
-                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-500 dark:text-zinc-400">Link URL</label>
+                          <Input
+                            type="url"
+                            value={editUrl}
+                            onChange={(e) => setEditUrl(e.target.value)}
+                            placeholder="https://..."
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="ghost" size="sm" onClick={() => setEditingTaskId(null)}>
+                            <X className="h-3.5 w-3.5 mr-1" /> Cancel
+                          </Button>
+                          <Button size="sm" onClick={() => saveEditTask(task.id)}>
+                            <Check className="h-3.5 w-3.5 mr-1" /> Save
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -502,6 +516,11 @@ export default function ProjectDetailPage() {
                                 : <Circle className="h-4 w-4 text-zinc-300 hover:text-green-500 transition-colors" />}
                             </button>
                             <span className={`flex-1 text-sm ${task.done ? "line-through" : ""}`}>{task.name}</span>
+                            {task.url && (
+                              <a href={task.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex items-center text-zinc-400 hover:text-blue-500 transition-colors shrink-0" title={task.url}>
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
                             {task.workCategory === "GRADING" && <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
                             {task.scheduledDate && (
                               <span className="text-xs text-zinc-400 shrink-0 flex items-center gap-1">
