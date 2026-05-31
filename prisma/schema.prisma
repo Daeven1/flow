@@ -42,6 +42,7 @@ model Task {
   doneAt        DateTime?
   reminderId      String?
   syncedFrom      String    @default("app")
+  url             String?
   createdAt       DateTime  @default(now())
   timeLogs        TimeLog[]
   recurringTaskId String?
