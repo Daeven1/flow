@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { projectId, name, leadDays, deadline, workCategory, sprint, estMinutes, context } = body;
+  const { projectId, name, leadDays, deadline, workCategory, sprint, estMinutes, context, url } = body;
 
   let scheduledDate: Date | null = null;
   if (deadline) {
@@ -63,6 +63,7 @@ export async function POST(req: Request) {
       sprint: Number(sprint),
       estMinutes: Number(estMinutes) || 30,
       context: context ?? "PROFESSIONAL",
+      url: url ?? null,
       ...(body.done ? { done: true, doneAt: new Date() } : {}),
     },
     include: { project: true },

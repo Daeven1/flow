@@ -35,6 +35,7 @@ export async function PATCH(
   if ("context" in body && body.context != null) data.context = body.context;
   if ("leadDays" in body) data.leadDays = Number(body.leadDays);
   if ("reminderId" in body) data.reminderId = body.reminderId ?? null;
+  if ("url" in body) data.url = body.url || null;
 
   if ("deadline" in body) {
     data.deadline = body.deadline ? new Date(body.deadline) : null;
