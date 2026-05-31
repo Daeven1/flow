@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SPRINT_LABELS, SPRINT_COLORS, formatMinutes, formatRelativeDate, urgencySort } from "@/lib/utils";
-import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, Star, RefreshCw, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, Star, RefreshCw, Trash2, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { parseISO, startOfDay } from "date-fns";
 
 type FilterMode = "all" | "1" | "2" | "3" | "4" | "done";
@@ -38,6 +38,7 @@ interface Task {
   scheduledDate: string | null;
   workCategory: string;
   context: string;
+  url: string | null;
   project: { id: string; name: string } | null;
 }
 
@@ -86,6 +87,7 @@ export default function TasksPage() {
   const [editEst, setEditEst] = useState("30");
   const [editCategory, setEditCategory] = useState("STANDARD");
   const [editContext, setEditContext] = useState<Mode>("PROFESSIONAL");
+  const [editUrl, setEditUrl] = useState("");
 
   const [recurringTasks, setRecurringTasks] = useState<RecurringTask[]>([]);
   const [showRecurring, setShowRecurring] = useState(false);
@@ -180,6 +182,7 @@ export default function TasksPage() {
     setEditEst(String(task.estMinutes));
     setEditCategory(task.workCategory);
     setEditContext((task.context as Mode) ?? "PROFESSIONAL");
+    setEditUrl(task.url ?? "");
   }
 
   function formatPattern(rt: RecurringTask): string {
@@ -271,6 +274,7 @@ export default function TasksPage() {
         estMinutes: parseInt(editEst),
         workCategory: editCategory,
         context: editContext,
+        url: editUrl.trim() || null,
       }),
     });
     setEditingId(null);
@@ -485,6 +489,16 @@ export default function TasksPage() {
                     </Button>
                   </div>
                 </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500 dark:text-zinc-400">Link URL</label>
+                  <Input
+                    type="url"
+                    value={editUrl}
+                    onChange={(e) => setEditUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="h-8 text-xs"
+                  />
+                </div>
               </div>
             ) : (
               /* ── Normal view ── */
@@ -508,6 +522,11 @@ export default function TasksPage() {
 
                 <div className="flex-1 min-w-0">
                   <span className={`text-sm ${task.done ? "line-through" : ""}`}>{task.name}</span>
+                  {task.url && (
+                    <a href={task.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="ml-1 inline-flex items-center text-zinc-400 hover:text-blue-500 transition-colors" title={task.url}>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
                   {task.project && (
                     <span className="ml-2 text-xs text-zinc-400">{task.project.name}</span>
                   )}
