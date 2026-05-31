@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       sprint: Number(sprint),
       estMinutes: Number(estMinutes) || 30,
       context: context ?? "PROFESSIONAL",
-      url: url ?? null,
+      url: url || null,
       ...(body.done ? { done: true, doneAt: new Date() } : {}),
     },
     include: { project: true },
