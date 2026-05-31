@@ -31,6 +31,7 @@ import {
   Pencil,
   Check,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import {
@@ -52,6 +53,7 @@ interface Task {
   scheduledDate: string | null;
   workCategory: string;
   context: string;
+  url: string | null;
   project: { id: string; name: string } | null;
 }
 
@@ -70,6 +72,7 @@ interface ParsedTask {
   estMinutes: number;
   workCategory: string;
   deadline: string; // YYYY-MM-DD, defaults to today
+  url: string | null;
   selected: boolean;
 }
 
@@ -211,6 +214,7 @@ export default function DailyPage() {
         (data.tasks || []).map((t: Omit<ParsedTask, "selected">) => ({
           ...t,
           deadline: t.deadline || todayStr,
+          url: t.url ?? null,
           selected: true,
         }))
       );
@@ -229,7 +233,7 @@ export default function DailyPage() {
         fetch("/api/tasks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: t.name, sprint: t.sprint, estMinutes: t.estMinutes, workCategory: t.workCategory ?? "STANDARD", deadline: t.deadline || null, context: mode }),
+          body: JSON.stringify({ name: t.name, sprint: t.sprint, estMinutes: t.estMinutes, workCategory: t.workCategory ?? "STANDARD", deadline: t.deadline || null, url: t.url || null, context: mode }),
         })
       )
     );
@@ -644,6 +648,11 @@ export default function DailyPage() {
                                   <Circle className="h-4 w-4 text-purple-300 hover:text-green-500 transition-colors" />
                                 </button>
                                 <span className="flex-1 text-sm font-medium">{task.name}</span>
+                                {task.url && (
+                                  <a href={task.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="ml-1 inline-flex items-center text-zinc-400 hover:text-blue-500 transition-colors shrink-0" title={task.url}>
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
                                 {task.workCategory === "GRADING" && (
                                   <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
                                 )}
@@ -766,6 +775,19 @@ export default function DailyPage() {
                       className="rounded"
                     />
                     <span className="flex-1 text-sm font-medium">{task.name}</span>
+                    {task.url && (
+                      <a
+                        href={task.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 shrink-0 max-w-[120px] truncate"
+                        title={task.url}
+                      >
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                        {(() => { try { return new URL(task.url).hostname; } catch { return task.url; } })()}
+                      </a>
+                    )}
                     <span className="text-slate-400 dark:text-zinc-500 text-xs shrink-0">{formatMinutes(task.estMinutes)}</span>
                   </label>
                   {task.selected && (
@@ -900,6 +922,11 @@ export default function DailyPage() {
                           <Circle className="h-4 w-4 text-slate-300 dark:text-zinc-600 hover:text-green-500 transition-colors" />
                         </button>
                         <span className="flex-1 text-sm">{task.name}</span>
+                        {task.url && (
+                          <a href={task.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="ml-1 inline-flex items-center text-zinc-400 hover:text-blue-500 transition-colors shrink-0" title={task.url}>
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
                         {task.workCategory === "GRADING" && (
                           <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
                         )}
@@ -937,6 +964,11 @@ export default function DailyPage() {
                   {formatRelativeDate(task.scheduledDate)}
                 </span>
                 <span className="flex-1 text-sm">{task.name}</span>
+                {task.url && (
+                  <a href={task.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="ml-1 inline-flex items-center text-zinc-400 hover:text-blue-500 transition-colors shrink-0" title={task.url}>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
                 {task.workCategory === "GRADING" && (
                   <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
                 )}
