@@ -60,8 +60,9 @@ model DailyLog {
   microCommitment String   @default("")
   microDone       Boolean  @default(false)
   brainDump       String   @default("")
-  forageOrder     String   @default("")
-  createdAt       DateTime @default(now())
+  forageOrder      String   @default("")
+  flaggedForageIds String   @default("[]")
+  createdAt        DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@unique([userId, date])
@@ -111,6 +112,7 @@ model TimeLog {
 model UserSettings {
   id            String @id
   workNightDays String @default("[1]")
+  userMode      String @default("TEACHER")
 }
 
 model TaskPreset {
