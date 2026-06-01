@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   const presetsContext =
     presets.length > 0
       ? `\n\nUser's personal task timing presets (use these for matching task types):\n${presets
-          .map((p) => `- "${p.name}": sprint ${p.sprint}, ${p.estMinutes} mins, ${p.workCategory === "GRADING" ? "work night" : "prep period"}`)
+          .map((p) => `- "${p.name}": sprint ${p.sprint}, ${p.estMinutes} mins, ${p.workCategory === "GRADING" ? (userMode === "STUDENT" ? "after school" : "work night") : (userMode === "STUDENT" ? "during school" : "prep period")}`)
           .join("\n")}`
       : "";
 
