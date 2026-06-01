@@ -32,3 +32,24 @@
 html.personal-mode:not(.dark) body {
   background-color: rgb(254 252 232); /* yellow-50 */
 }
+
+@keyframes iridescent {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.forage-flagged {
+  background: linear-gradient(
+    270deg,
+    rgba(255, 0, 128, 0.08),
+    rgba(255, 165, 0, 0.08),
+    rgba(255, 255, 0, 0.08),
+    rgba(0, 200, 100, 0.08),
+    rgba(0, 150, 255, 0.08),
+    rgba(130, 80, 255, 0.08),
+    rgba(255, 0, 128, 0.08)
+  );
+  background-size: 400% 400%;
+  animation: iridescent 9s ease infinite;
+}
