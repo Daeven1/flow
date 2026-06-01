@@ -2,15 +2,16 @@ export const runtime = 'nodejs';
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { TEMPLATES } from "@/lib/templates";
+import { TEMPLATES, STUDENT_TEMPLATES } from "@/lib/templates";
 import { getUser } from "@/lib/auth";
 
 async function seedTemplatesIfEmpty(userId: string) {
   const count = await prisma.template.count({ where: { userId } });
   if (count > 0) return;
-
-  for (let i = 0; i < TEMPLATES.length; i++) {
-    const t = TEMPLATES[i];
+  const settings = await prisma.userSettings.findUnique({ where: { id: userId } });
+  const templates = settings?.userMode === "STUDENT" ? STUDENT_TEMPLATES : TEMPLATES;
+  for (let i = 0; i < templates.length; i++) {
+    const t = templates[i];
     await prisma.template.create({
       data: {
         userId,
