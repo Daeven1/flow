@@ -92,15 +92,21 @@ export default function SettingsPage() {
 
   async function switchMode(target: "TEACHER" | "STUDENT") {
     setModeSwitching(true);
-    await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userMode: target }),
-    });
-    setUserMode(target);
-    setModeSwitchTarget(null);
-    setModeSwitching(false);
-    loadAll();
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userMode: target }),
+      });
+      if (!res.ok) throw new Error("Failed to switch mode");
+      setUserMode(target);
+      setModeSwitchTarget(null);
+      await loadAll();
+    } catch {
+      alert("Failed to switch mode. Please try again.");
+    } finally {
+      setModeSwitching(false);
+    }
   }
 
   // ── Presets ──
@@ -187,6 +193,7 @@ export default function SettingsPage() {
         <div className="flex items-center gap-1 p-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 w-fit">
           <button
             onClick={() => userMode !== "TEACHER" && setModeSwitchTarget("TEACHER")}
+            disabled={modeSwitching}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               userMode === "TEACHER"
                 ? "bg-indigo-600 text-white shadow-sm"
@@ -197,6 +204,7 @@ export default function SettingsPage() {
           </button>
           <button
             onClick={() => userMode !== "STUDENT" && setModeSwitchTarget("STUDENT")}
+            disabled={modeSwitching}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               userMode === "STUDENT"
                 ? "bg-indigo-600 text-white shadow-sm"
