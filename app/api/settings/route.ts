@@ -42,7 +42,7 @@ export async function POST(req: Request) {
       const presets = userMode === "STUDENT" ? STUDENT_DEFAULT_PRESETS : TEACHER_DEFAULT_PRESETS;
       const templates = userMode === "STUDENT" ? STUDENT_TEMPLATES : TEMPLATES;
 
-      await prisma.$transaction(async (tx) => {
+      const updatedSettings = await prisma.$transaction(async (tx) => {
         await tx.taskPreset.deleteMany({ where: { userId } });
         await tx.taskPreset.createMany({
           data: presets.map((p, i) => ({ ...p, userId, sortOrder: i })),
@@ -71,17 +71,16 @@ export async function POST(req: Request) {
             },
           });
         }
-        await tx.userSettings.upsert({
+        return tx.userSettings.upsert({
           where: { id: userId },
-          create: { id: userId, workNightDays: "[1]", userMode },
-          update: { userMode },
+          create: { id: userId, workNightDays: JSON.stringify(workNightDays ?? [1]), userMode },
+          update: { userMode, ...(workNightDays !== undefined && { workNightDays: JSON.stringify(workNightDays) }) },
         });
       });
 
-      const updated = await prisma.userSettings.findUnique({ where: { id: userId } });
       return NextResponse.json({
-        workNightDays: JSON.parse(updated!.workNightDays) as number[],
-        userMode: updated!.userMode as "TEACHER" | "STUDENT",
+        workNightDays: JSON.parse(updatedSettings.workNightDays) as number[],
+        userMode: updatedSettings.userMode as "TEACHER" | "STUDENT",
       });
     }
   }
