@@ -692,10 +692,10 @@ export default function DailyPage() {
       )}
 
       {/* ── Fertile Ground ── */}
-      <div className="rounded-xl bg-stone-900 p-4 space-y-3">
+      <div className="rounded-xl bg-stone-200 dark:bg-stone-900 p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-bold text-sm text-stone-300">🌱 Fertile Ground</h2>
+            <h2 className="font-bold text-sm text-stone-700 dark:text-stone-300">🌱 Fertile Ground</h2>
             <p className="text-xs text-stone-500 mt-0.5">
               Drop seeds here. One thought per line or free-write.
             </p>
@@ -705,7 +705,7 @@ export default function DailyPage() {
             variant="outline"
             onClick={parseBrainDump}
             disabled={parsing || !log.brainDump.trim()}
-            className="border-stone-700 text-stone-300 hover:bg-stone-800 bg-transparent"
+            className="border-stone-400 text-stone-700 hover:bg-stone-300 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800 bg-transparent"
           >
             {parsing ? (
               <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -721,7 +721,7 @@ export default function DailyPage() {
           value={log.brainDump}
           onChange={(e) => setLog({ ...log, brainDump: e.target.value })}
           onBlur={() => saveLog({ brainDump: log.brainDump })}
-          className="bg-stone-950 text-stone-200 placeholder:text-stone-600 border-stone-700 resize-none"
+          className="bg-stone-100 text-stone-800 placeholder:text-stone-400 border-stone-300 dark:bg-stone-950 dark:text-stone-200 dark:placeholder:text-stone-600 dark:border-stone-700 resize-none"
         />
       </div>
 
