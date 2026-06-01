@@ -53,3 +53,18 @@ html.personal-mode:not(.dark) body {
   background-size: 400% 400%;
   animation: iridescent 9s ease infinite;
 }
+
+.dark .forage-flagged {
+  background: linear-gradient(
+    270deg,
+    rgba(255, 0, 128, 0.12),
+    rgba(255, 165, 0, 0.12),
+    rgba(255, 255, 0, 0.12),
+    rgba(0, 200, 100, 0.12),
+    rgba(0, 150, 255, 0.12),
+    rgba(130, 80, 255, 0.12),
+    rgba(255, 0, 128, 0.12)
+  );
+  background-size: 400% 400%;
+  animation: iridescent 9s ease infinite;
+}

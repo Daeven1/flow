@@ -420,7 +420,7 @@ export default function SettingsPage() {
             Manage templates for significant multi-step projects. Each template generates a set of scheduled tasks when you create a project.
           </p>
         </div>
-        <TemplateManager />
+        <TemplateManager key={userMode} />
       </section>
 
       {/* Note */}
