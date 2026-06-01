@@ -34,6 +34,9 @@ export default function SettingsPage() {
   const [workNightDays, setWorkNightDays] = useState<number[]>([1]);
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [userMode, setUserMode] = useState<"TEACHER" | "STUDENT">("TEACHER");
+  const [modeSwitchTarget, setModeSwitchTarget] = useState<"TEACHER" | "STUDENT" | null>(null);
+  const [modeSwitching, setModeSwitching] = useState(false);
 
   const [presets, setPresets] = useState<Preset[]>([]);
   const [resetPresetsConfirm, setResetPresetsConfirm] = useState(false);
@@ -62,6 +65,7 @@ export default function SettingsPage() {
     const settData = await settRes.json();
     const presetData = await presetRes.json();
     setWorkNightDays(settData.workNightDays ?? [1]);
+    setUserMode(settData.userMode ?? "TEACHER");
     setPresets(presetData);
     setLoading(false);
   }, []);
@@ -84,6 +88,19 @@ export default function SettingsPage() {
     });
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2000);
+  }
+
+  async function switchMode(target: "TEACHER" | "STUDENT") {
+    setModeSwitching(true);
+    await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userMode: target }),
+    });
+    setUserMode(target);
+    setModeSwitchTarget(null);
+    setModeSwitching(false);
+    loadAll();
   }
 
   // ── Presets ──
@@ -158,6 +175,60 @@ export default function SettingsPage() {
   return (
     <div className="space-y-10 max-w-2xl">
       <h1 className="text-xl font-bold text-slate-900 dark:text-white">Settings</h1>
+
+      {/* ── Profile Mode ── */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-medium">Profile Mode</h2>
+          <p className="text-xs text-zinc-500 mt-1">
+            Sets your default presets, templates, and AI context to match your role.
+          </p>
+        </div>
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 w-fit">
+          <button
+            onClick={() => userMode !== "TEACHER" && setModeSwitchTarget("TEACHER")}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              userMode === "TEACHER"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+            }`}
+          >
+            🏫 Teacher
+          </button>
+          <button
+            onClick={() => userMode !== "STUDENT" && setModeSwitchTarget("STUDENT")}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              userMode === "STUDENT"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+            }`}
+          >
+            🎒 Student
+          </button>
+        </div>
+        {modeSwitchTarget && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-zinc-500">
+              Switching to {modeSwitchTarget === "STUDENT" ? "Student" : "Teacher"} mode will replace your presets and default templates. Your tasks and projects stay. Continue?
+            </span>
+            <button
+              onClick={() => setModeSwitchTarget(null)}
+              className="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => switchMode(modeSwitchTarget)}
+              disabled={modeSwitching}
+              className="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {modeSwitching ? "Switching…" : "Switch"}
+            </button>
+          </div>
+        )}
+      </section>
+
+      <hr className="border-slate-200 dark:border-zinc-800" />
 
       {/* ── Work Nights ── */}
       <section className="space-y-4">
