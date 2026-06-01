@@ -64,6 +64,7 @@ interface DailyLog {
   microDone: boolean;
   brainDump: string;
   forageOrder: string;
+  flaggedForageIds?: string;
 }
 
 interface ParsedTask {
@@ -281,15 +282,20 @@ export default function DailyPage() {
   }, [parsedTasks.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function toggleForageFlag(taskId: string) {
-    const next = flaggedForageIds.includes(taskId)
-      ? flaggedForageIds.filter((id) => id !== taskId)
-      : [...flaggedForageIds, taskId];
+    const prev = flaggedForageIds;
+    const next = prev.includes(taskId)
+      ? prev.filter((id) => id !== taskId)
+      : [...prev, taskId];
     setFlaggedForageIds(next);
-    await fetch("/api/daily", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: todayStr, flaggedForageIds: JSON.stringify(next) }),
-    });
+    try {
+      await fetch("/api/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: todayStr, flaggedForageIds: JSON.stringify(next) }),
+      });
+    } catch {
+      setFlaggedForageIds(prev);
+    }
   }
 
   async function toggleTask(id: string, done: boolean) {
