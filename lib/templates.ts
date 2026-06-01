@@ -114,3 +114,68 @@ export const TEMPLATES: Template[] = [
     ],
   },
 ];
+
+export const STUDENT_TEMPLATES: Template[] = [
+  {
+    key: "ia-research",
+    label: "IA Research",
+    description: "Internal Assessment — research, write-up, and submission",
+    tasks: [
+      { name: "Define topic and research question",        leadDays: 21, sprint: 4, estMinutes: 45,  workCategory: "STANDARD" },
+      { name: "Write initial literature review",           leadDays: 17, sprint: 4, estMinutes: 90,  workCategory: "STANDARD" },
+      { name: "Design methodology or experiment",          leadDays: 14, sprint: 4, estMinutes: 60,  workCategory: "STANDARD" },
+      { name: "Collect or gather data",                    leadDays: 10, sprint: 4, estMinutes: 90,  workCategory: "STANDARD" },
+      { name: "Analyse data and interpret results",        leadDays: 7,  sprint: 4, estMinutes: 90,  workCategory: "GRADING"  },
+      { name: "Write discussion and conclusion",           leadDays: 5,  sprint: 4, estMinutes: 60,  workCategory: "GRADING"  },
+      { name: "Write full first draft",                    leadDays: 3,  sprint: 4, estMinutes: 90,  workCategory: "GRADING"  },
+      { name: "Revise and edit",                           leadDays: 1,  sprint: 2, estMinutes: 60,  workCategory: "STANDARD" },
+      { name: "Final proofread and submit",                leadDays: 0,  sprint: 1, estMinutes: 30,  workCategory: "STANDARD" },
+    ],
+  },
+  {
+    key: "extended-essay",
+    label: "Extended Essay",
+    description: "4000-word independent research essay for the IB Diploma",
+    tasks: [
+      { name: "Choose topic and meet supervisor",          leadDays: 30, sprint: 4, estMinutes: 30,  workCategory: "STANDARD" },
+      { name: "Finalise research question",                leadDays: 25, sprint: 4, estMinutes: 45,  workCategory: "STANDARD" },
+      { name: "Conduct research",                          leadDays: 18, sprint: 4, estMinutes: 120, workCategory: "GRADING"  },
+      { name: "Write first draft outline",                 leadDays: 14, sprint: 4, estMinutes: 60,  workCategory: "STANDARD" },
+      { name: "Write first full draft",                    leadDays: 10, sprint: 4, estMinutes: 120, workCategory: "GRADING"  },
+      { name: "Supervisor review meeting",                 leadDays: 7,  sprint: 3, estMinutes: 30,  workCategory: "STANDARD" },
+      { name: "Revise based on feedback",                  leadDays: 4,  sprint: 4, estMinutes: 90,  workCategory: "GRADING"  },
+      { name: "Final proofread and format",                leadDays: 1,  sprint: 2, estMinutes: 45,  workCategory: "STANDARD" },
+      { name: "Submit Extended Essay",                     leadDays: 0,  sprint: 1, estMinutes: 20,  workCategory: "STANDARD" },
+    ],
+  },
+  {
+    key: "cas-project",
+    label: "CAS Project",
+    description: "Creativity, Activity, Service project lifecycle",
+    tasks: [
+      { name: "Define CAS project theme and goals",        leadDays: 21, sprint: 4, estMinutes: 30,  workCategory: "STANDARD" },
+      { name: "Plan activities and timeline",              leadDays: 18, sprint: 4, estMinutes: 45,  workCategory: "STANDARD" },
+      { name: "Complete Creativity component",             leadDays: 14, sprint: 4, estMinutes: 60,  workCategory: "STANDARD" },
+      { name: "Complete Activity component",               leadDays: 10, sprint: 4, estMinutes: 60,  workCategory: "STANDARD" },
+      { name: "Complete Service component",                leadDays: 7,  sprint: 4, estMinutes: 60,  workCategory: "STANDARD" },
+      { name: "Write CAS reflections",                     leadDays: 3,  sprint: 4, estMinutes: 45,  workCategory: "GRADING"  },
+      { name: "Final portfolio review",                    leadDays: 1,  sprint: 3, estMinutes: 30,  workCategory: "STANDARD" },
+      { name: "Submit CAS portfolio",                      leadDays: 0,  sprint: 1, estMinutes: 20,  workCategory: "STANDARD" },
+    ],
+  },
+  {
+    key: "design-cycle-project",
+    label: "Design Cycle Project",
+    description: "MYP Design cycle — Inquire, Develop, Create, Evaluate",
+    tasks: [
+      { name: "Inquire and Analyse — define the problem",  leadDays: 14, sprint: 4, estMinutes: 45,  workCategory: "STANDARD" },
+      { name: "Research existing solutions",               leadDays: 12, sprint: 4, estMinutes: 60,  workCategory: "STANDARD" },
+      { name: "Develop design brief and specifications",   leadDays: 10, sprint: 4, estMinutes: 45,  workCategory: "STANDARD" },
+      { name: "Create design ideas and choose direction",  leadDays: 8,  sprint: 4, estMinutes: 60,  workCategory: "STANDARD" },
+      { name: "Plan creation process",                     leadDays: 6,  sprint: 4, estMinutes: 45,  workCategory: "STANDARD" },
+      { name: "Create the solution",                       leadDays: 4,  sprint: 4, estMinutes: 90,  workCategory: "STANDARD" },
+      { name: "Test and evaluate against criteria",        leadDays: 2,  sprint: 4, estMinutes: 45,  workCategory: "STANDARD" },
+      { name: "Write final reflection and submit",         leadDays: 0,  sprint: 2, estMinutes: 30,  workCategory: "GRADING"  },
+    ],
+  },
+];
