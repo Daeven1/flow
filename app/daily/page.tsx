@@ -110,6 +110,20 @@ function extractUrls(text: string): string[] {
   return Array.from(new Set(text.match(urlRegex) ?? []));
 }
 
+function RainbowIcon({ active }: { active: boolean }) {
+  const colors = active
+    ? ["#FF0080", "#FF8800", "#44CC66", "#4499FF"]
+    : ["#888", "#888", "#888", "#888"];
+  return (
+    <svg width="16" height="10" viewBox="0 0 20 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M1 11 C1 6, 5 1, 10 1 C15 1, 19 6, 19 11"             stroke={colors[0]} strokeWidth="2.2" strokeLinecap="round"/>
+      <path d="M3.5 11 C3.5 7, 6.5 3.5, 10 3.5 C13.5 3.5, 16.5 7, 16.5 11" stroke={colors[1]} strokeWidth="2.2" strokeLinecap="round"/>
+      <path d="M6 11 C6 8, 7.8 6, 10 6 C12.2 6, 14 8, 14 11"         stroke={colors[2]} strokeWidth="2.2" strokeLinecap="round"/>
+      <path d="M8.5 11 C8.5 9.5, 9.1 8.5, 10 8.5 C10.9 8.5, 11.5 9.5, 11.5 11" stroke={colors[3]} strokeWidth="2.2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
 export default function DailyPage() {
   const todayStr = format(startOfDay(new Date()), "yyyy-MM-dd");
   const { mode } = useModeContext();
@@ -137,6 +151,7 @@ export default function DailyPage() {
   const [gainInput, setGainInput] = useState("");
   const [addingToGain, setAddingToGain] = useState(false);
   const [urgentCustomOrder, setUrgentCustomOrder] = useState<string[]>([]);
+  const [flaggedForageIds, setFlaggedForageIds] = useState<string[]>([]);
   const [editingUrgentId, setEditingUrgentId] = useState<string | null>(null);
   const [editUrgentName, setEditUrgentName] = useState("");
   const [editUrgentSprint, setEditUrgentSprint] = useState("1");
@@ -156,6 +171,9 @@ export default function DailyPage() {
       setLog(logData);
       if (logData.forageOrder) {
         try { setUrgentCustomOrder(JSON.parse(logData.forageOrder)); } catch { /* ignore corrupt data */ }
+      }
+      if (logData.flaggedForageIds) {
+        try { setFlaggedForageIds(JSON.parse(logData.flaggedForageIds)); } catch { /* ignore */ }
       }
     }
     setTasks(tasksData);
@@ -261,6 +279,18 @@ export default function DailyPage() {
       }
     });
   }, [parsedTasks.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function toggleForageFlag(taskId: string) {
+    const next = flaggedForageIds.includes(taskId)
+      ? flaggedForageIds.filter((id) => id !== taskId)
+      : [...flaggedForageIds, taskId];
+    setFlaggedForageIds(next);
+    await fetch("/api/daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayStr, flaggedForageIds: JSON.stringify(next) }),
+    });
+  }
 
   async function toggleTask(id: string, done: boolean) {
     const now = new Date().toISOString();
@@ -571,7 +601,7 @@ export default function DailyPage() {
                           <div
                             ref={provided.innerRef}
                             {...provided.draggableProps}
-                            className="bg-white dark:bg-zinc-950"
+                            className={flaggedForageIds.includes(task.id) ? "forage-flagged" : "bg-white dark:bg-zinc-950"}
                             style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}`, ...provided.draggableProps.style }}
                           >
                             {editingUrgentId === task.id ? (
@@ -670,6 +700,15 @@ export default function DailyPage() {
                                 </span>
                                 <SprintBadge sprint={task.sprint} size="sm" />
                                 <span className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleForageFlag(task.id); }}
+                                  className={`p-1 rounded transition-all shrink-0 ${
+                                    flaggedForageIds.includes(task.id) ? "opacity-100" : "opacity-30 hover:opacity-60"
+                                  }`}
+                                  title="Flag for this sitting"
+                                >
+                                  <RainbowIcon active={flaggedForageIds.includes(task.id)} />
+                                </button>
                                 <button
                                   onClick={() => startEditUrgent(task)}
                                   className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900 text-purple-300 hover:text-purple-600 transition-colors shrink-0"
