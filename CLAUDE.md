@@ -8,6 +8,10 @@ When executing an implementation plan, always use the **subagent-driven developm
 
 **Never offer inline execution as an option.** When asked to execute a plan, go straight to subagent-driven without asking.
 
+## Deployment
+
+**Vercel does not auto-deploy. Always manually deploy after pushing.** Use the `vercel:deploy` skill with the `prod` argument at the end of every session after pushing to origin.
+
 ## End of session
 
 At the end of every session, update the Obsidian note above:
