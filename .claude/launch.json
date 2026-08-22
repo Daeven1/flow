@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "flow-dev",
-      "runtimeExecutable": "/tmp/node-v20.19.0-darwin-arm64/bin/npm",
+      "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
     }

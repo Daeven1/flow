@@ -151,6 +151,8 @@ export default function DailyPage() {
   const [enrichedLinks, setEnrichedLinks] = useState<{ url: string; title: string | null }[]>([]);
   const [gainInput, setGainInput] = useState("");
   const [addingToGain, setAddingToGain] = useState(false);
+  const [forageInput, setForageInput] = useState("");
+  const [addingToForage, setAddingToForage] = useState(false);
   const [urgentCustomOrder, setUrgentCustomOrder] = useState<string[]>([]);
   const [flaggedForageIds, setFlaggedForageIds] = useState<string[]>([]);
   const [editingUrgentId, setEditingUrgentId] = useState<string | null>(null);
@@ -326,6 +328,24 @@ export default function DailyPage() {
       loadData();
     } finally {
       setAddingToGain(false);
+    }
+  }
+
+  async function addToForage(e: React.FormEvent) {
+    e.preventDefault();
+    if (!forageInput.trim() || addingToForage) return;
+    setAddingToForage(true);
+    const name = forageInput.trim();
+    setForageInput("");
+    try {
+      await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, sprint: 1, estMinutes: 30, workCategory: "STANDARD", deadline: todayStr, context: mode }),
+      });
+      loadData();
+    } finally {
+      setAddingToForage(false);
     }
   }
 
@@ -581,160 +601,179 @@ export default function DailyPage() {
       </div>
 
       {/* ── 🍇 TODAY'S FORAGE ── */}
-      {urgentDisplayed.length > 0 && (
-        <div className="rounded border-2 border-purple-300 dark:border-purple-800 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-purple-50 dark:bg-purple-950 border-b border-purple-200 dark:border-purple-800">
-            <Zap className="h-4 w-4 text-purple-500" />
-            <span className="font-medium text-sm text-purple-700 dark:text-purple-400">Today's Forage</span>
-            <span className="text-xs text-purple-500 ml-1">
-              — these tasks need attention today regardless of sprint
-            </span>
-          </div>
-          <DragDropContext onDragEnd={handleUrgentDragEnd}>
-            <Droppable droppableId="urgent-now">
-              {(provided) => (
-                <div
-                  className="divide-y divide-purple-100 dark:divide-purple-900"
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                >
-                  {urgentDisplayed.map((task, index) => {
-                    const dl = task.deadline ? startOfDay(parseISO(task.deadline)) : null;
-                    const daysLeft = dl ? differenceInCalendarDays(dl, today) : null;
-                    return (
-                      <Draggable key={task.id} draggableId={task.id} index={index}>
-                        {(provided) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            className={flaggedForageIds.includes(task.id) ? "forage-flagged" : "bg-white dark:bg-zinc-950"}
-                            style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}`, ...provided.draggableProps.style }}
-                          >
-                            {editingUrgentId === task.id ? (
-                              <div className="px-4 py-3 space-y-2 bg-purple-50 dark:bg-purple-950">
+      <div className="rounded border-2 border-purple-300 dark:border-purple-800 overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-purple-50 dark:bg-purple-950 border-b border-purple-200 dark:border-purple-800">
+          <Zap className="h-4 w-4 text-purple-500" />
+          <span className="font-medium text-sm text-purple-700 dark:text-purple-400">Today's Forage</span>
+          <span className="text-xs text-purple-500 ml-1">
+            — these tasks need attention today regardless of sprint
+          </span>
+        </div>
+        {urgentDisplayed.length === 0 && (
+          <p className="px-4 py-3 text-sm text-slate-400 dark:text-zinc-500 italic">
+            Nothing urgent today — add anything that can&apos;t wait.
+          </p>
+        )}
+        <DragDropContext onDragEnd={handleUrgentDragEnd}>
+          <Droppable droppableId="urgent-now">
+            {(provided) => (
+              <div
+                className="divide-y divide-purple-100 dark:divide-purple-900"
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+              >
+                {urgentDisplayed.map((task, index) => {
+                  const dl = task.deadline ? startOfDay(parseISO(task.deadline)) : null;
+                  const daysLeft = dl ? differenceInCalendarDays(dl, today) : null;
+                  return (
+                    <Draggable key={task.id} draggableId={task.id} index={index}>
+                      {(provided) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          className={flaggedForageIds.includes(task.id) ? "forage-flagged" : "bg-white dark:bg-zinc-950"}
+                          style={{ borderLeft: `6px solid ${SPRINT_COLORS[task.sprint]}`, ...provided.draggableProps.style }}
+                        >
+                          {editingUrgentId === task.id ? (
+                            <div className="px-4 py-3 space-y-2 bg-purple-50 dark:bg-purple-950">
+                              <Input
+                                value={editUrgentName}
+                                onChange={(e) => setEditUrgentName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveEditUrgent(task.id);
+                                  if (e.key === "Escape") setEditingUrgentId(null);
+                                }}
+                                autoFocus
+                                className="text-sm"
+                              />
+                              <div className="flex items-center gap-2">
+                                <Select value={editUrgentSprint} onValueChange={setEditUrgentSprint}>
+                                  <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {[1, 2, 3, 4].map((s) => (
+                                      <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                                 <Input
-                                  value={editUrgentName}
-                                  onChange={(e) => setEditUrgentName(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") saveEditUrgent(task.id);
-                                    if (e.key === "Escape") setEditingUrgentId(null);
-                                  }}
-                                  autoFocus
-                                  className="text-sm"
+                                  type="date"
+                                  value={editUrgentDeadline}
+                                  onChange={(e) => setEditUrgentDeadline(e.target.value)}
+                                  className="h-8 text-xs w-36"
                                 />
-                                <div className="flex items-center gap-2">
-                                  <Select value={editUrgentSprint} onValueChange={setEditUrgentSprint}>
-                                    <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                      {[1, 2, 3, 4].map((s) => (
-                                        <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <Input
-                                    type="date"
-                                    value={editUrgentDeadline}
-                                    onChange={(e) => setEditUrgentDeadline(e.target.value)}
-                                    className="h-8 text-xs w-36"
-                                  />
-                                  <Input
-                                    type="number"
-                                    min="5"
-                                    step="5"
-                                    value={editUrgentEst}
-                                    onChange={(e) => setEditUrgentEst(e.target.value)}
-                                    className="h-8 text-xs w-24"
-                                    placeholder="Est. mins"
-                                  />
-                                  <div className="bg-stone-800 rounded-full p-0.5 flex gap-0.5 border border-stone-700 shrink-0">
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditUrgentContext("PROFESSIONAL")}
-                                      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${editUrgentContext === "PROFESSIONAL" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
-                                    >
-                                      💼 Pro
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditUrgentContext("PERSONAL")}
-                                      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${editUrgentContext === "PERSONAL" ? "bg-green-600 text-white" : "text-slate-400 hover:text-white"}`}
-                                    >
-                                      🌿 Home
-                                    </button>
-                                  </div>
-                                  <div className="flex gap-2 ml-auto">
-                                    <Button variant="ghost" size="sm" onClick={() => setEditingUrgentId(null)}>
-                                      <X className="h-3.5 w-3.5 mr-1" /> Cancel
-                                    </Button>
-                                    <Button size="sm" onClick={() => saveEditUrgent(task.id)}>
-                                      <Check className="h-3.5 w-3.5 mr-1" /> Save
-                                    </Button>
-                                  </div>
+                                <Input
+                                  type="number"
+                                  min="5"
+                                  step="5"
+                                  value={editUrgentEst}
+                                  onChange={(e) => setEditUrgentEst(e.target.value)}
+                                  className="h-8 text-xs w-24"
+                                  placeholder="Est. mins"
+                                />
+                                <div className="bg-stone-800 rounded-full p-0.5 flex gap-0.5 border border-stone-700 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditUrgentContext("PROFESSIONAL")}
+                                    className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${editUrgentContext === "PROFESSIONAL" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+                                  >
+                                    💼 Pro
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditUrgentContext("PERSONAL")}
+                                    className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${editUrgentContext === "PERSONAL" ? "bg-green-600 text-white" : "text-slate-400 hover:text-white"}`}
+                                  >
+                                    🌿 Home
+                                  </button>
+                                </div>
+                                <div className="flex gap-2 ml-auto">
+                                  <Button variant="ghost" size="sm" onClick={() => setEditingUrgentId(null)}>
+                                    <X className="h-3.5 w-3.5 mr-1" /> Cancel
+                                  </Button>
+                                  <Button size="sm" onClick={() => saveEditUrgent(task.id)}>
+                                    <Check className="h-3.5 w-3.5 mr-1" /> Save
+                                  </Button>
                                 </div>
                               </div>
-                            ) : (
-                              <div className="flex items-center gap-3 px-4 py-2.5 group">
-                                <span
-                                  {...provided.dragHandleProps}
-                                  className="text-purple-200 dark:text-purple-900 cursor-grab active:cursor-grabbing shrink-0"
-                                >
-                                  <GripVertical className="h-4 w-4" />
-                                </span>
-                                <button onClick={() => toggleTask(task.id, true)}>
-                                  <Circle className="h-4 w-4 text-purple-300 hover:text-green-500 transition-colors" />
-                                </button>
-                                <span className="flex-1 text-sm font-medium">{task.name}</span>
-                                {task.url && (
-                                  <a href={task.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="ml-1 inline-flex items-center text-zinc-400 hover:text-blue-500 transition-colors shrink-0" title={task.url}>
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                )}
-                                {task.workCategory === "GRADING" && (
-                                  <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-                                )}
-                                {task.project && (
-                                  <span className="text-xs text-slate-400 dark:text-zinc-500 hidden sm:block shrink-0">{task.project.name}</span>
-                                )}
-                                <span className={`text-xs font-semibold shrink-0 ${
-                                  daysLeft !== null && daysLeft < 0 ? "text-purple-600" :
-                                  daysLeft === 0 ? "text-purple-600" : "text-amber-600"
-                                }`}>
-                                  {daysLeft === null ? "" :
-                                   daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` :
-                                   daysLeft === 0 ? "due today" :
-                                   "due tomorrow"}
-                                </span>
-                                <SprintBadge sprint={task.sprint} size="sm" />
-                                <span className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); toggleForageFlag(task.id); }}
-                                  className={`p-1 rounded transition-all shrink-0 ${
-                                    flaggedForageIds.includes(task.id) ? "opacity-100" : "opacity-30 hover:opacity-60"
-                                  }`}
-                                  title="Flag for this sitting"
-                                >
-                                  <RainbowIcon active={flaggedForageIds.includes(task.id)} />
-                                </button>
-                                <button
-                                  onClick={() => startEditUrgent(task)}
-                                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900 text-purple-300 hover:text-purple-600 transition-colors shrink-0"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </Draggable>
-                    );
-                  })}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
-        </div>
-      )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3 px-4 py-2.5 group">
+                              <span
+                                {...provided.dragHandleProps}
+                                className="text-purple-200 dark:text-purple-900 cursor-grab active:cursor-grabbing shrink-0"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </span>
+                              <button onClick={() => toggleTask(task.id, true)}>
+                                <Circle className="h-4 w-4 text-purple-300 hover:text-green-500 transition-colors" />
+                              </button>
+                              <span className="flex-1 text-sm font-medium">{task.name}</span>
+                              {task.url && (
+                                <a href={task.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="ml-1 inline-flex items-center text-zinc-400 hover:text-blue-500 transition-colors shrink-0" title={task.url}>
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                              {task.workCategory === "GRADING" && (
+                                <Moon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                              )}
+                              {task.project && (
+                                <span className="text-xs text-slate-400 dark:text-zinc-500 hidden sm:block shrink-0">{task.project.name}</span>
+                              )}
+                              <span className={`text-xs font-semibold shrink-0 ${
+                                daysLeft !== null && daysLeft < 0 ? "text-purple-600" :
+                                daysLeft === 0 ? "text-purple-600" : "text-amber-600"
+                              }`}>
+                                {daysLeft === null ? "" :
+                                 daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` :
+                                 daysLeft === 0 ? "due today" :
+                                 "due tomorrow"}
+                              </span>
+                              <SprintBadge sprint={task.sprint} size="sm" />
+                              <span className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleForageFlag(task.id); }}
+                                className={`p-1 rounded transition-all shrink-0 ${
+                                  flaggedForageIds.includes(task.id) ? "opacity-100" : "opacity-30 hover:opacity-60"
+                                }`}
+                                title="Flag for this sitting"
+                              >
+                                <RainbowIcon active={flaggedForageIds.includes(task.id)} />
+                              </button>
+                              <button
+                                onClick={() => startEditUrgent(task)}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900 text-purple-300 hover:text-purple-600 transition-colors shrink-0"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </Draggable>
+                  );
+                })}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
+        {/* Quick add to forage */}
+        <form onSubmit={addToForage} className="flex items-center gap-2 px-4 py-2.5 border-t border-purple-100 dark:border-purple-900">
+          <Plus className="h-4 w-4 text-purple-300 dark:text-purple-800 shrink-0" />
+          <input
+            type="text"
+            placeholder="Add something urgent for today…"
+            value={forageInput}
+            onChange={(e) => setForageInput(e.target.value)}
+            className="flex-1 text-sm bg-transparent outline-none placeholder:text-purple-300 dark:placeholder:text-purple-800 text-slate-700 dark:text-zinc-300"
+          />
+          {forageInput.trim() && (
+            <button type="submit" disabled={addingToForage} className="text-xs text-purple-600 dark:text-purple-400 font-medium shrink-0 disabled:opacity-50">
+              {addingToForage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+            </button>
+          )}
+        </form>
+      </div>
 
       {/* ── Fertile Ground ── */}
       <div className="rounded-xl bg-stone-200 dark:bg-stone-900 p-4 space-y-3">
