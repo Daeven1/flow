@@ -34,18 +34,22 @@ function sortForColumn(list: CalendarTask[]) {
 export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarProps) {
   const [local, setLocal] = useState<CalendarTask[]>(tasks);
   const [windowStart, setWindowStart] = useState(() => startOfDay(new Date()));
-  const pendingIds = useRef<Set<string>>(new Set());
+  const pendingRefcount = useRef<Map<string, number>>(new Map());
+  const dragSequence = useRef<Map<string, number>>(new Map());
 
   // Keep the optimistic copy in step with fresh server data, preserving pending optimistic updates
   useEffect(() => {
     setLocal((prev) => {
       const merged = [...tasks];
-      for (const pendingId of pendingIds.current) {
-        const local = prev.find((t) => t.id === pendingId);
-        if (local) {
-          const idx = merged.findIndex((t) => t.id === pendingId);
-          if (idx !== -1) {
-            merged[idx] = local;
+      for (const [pendingId, refcount] of pendingRefcount.current) {
+        if (refcount > 0) {
+          const pendingTask = prev.find((t) => t.id === pendingId);
+          if (pendingTask) {
+            const idx = merged.findIndex((t) => t.id === pendingId);
+            if (idx !== -1) {
+              // Carry forward only scheduledDate from optimistic state; take other fields from server
+              merged[idx] = { ...merged[idx], scheduledDate: pendingTask.scheduledDate };
+            }
           }
         }
       }
@@ -72,15 +76,19 @@ export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarP
     const toTray = destination.droppableId === "tray";
     const nextDate = toTray ? null : destination.droppableId.slice("day:".length);
 
-    // Capture the previous scheduledDate for rollback
+    // Capture the previous scheduledDate and sequence number for rollback
     const previousDate = local.find((t) => t.id === draggableId)?.scheduledDate ?? null;
+    const currentSequence = (dragSequence.current.get(draggableId) ?? 0) + 1;
+    dragSequence.current.set(draggableId, currentSequence);
 
     // Optimistically update UI
     setLocal((prev) =>
       prev.map((t) => (t.id === draggableId ? { ...t, scheduledDate: nextDate } : t))
     );
 
-    pendingIds.current.add(draggableId);
+    // Increment refcount for this task
+    const refcount = (pendingRefcount.current.get(draggableId) ?? 0) + 1;
+    pendingRefcount.current.set(draggableId, refcount);
 
     try {
       const res = await fetch(`/api/tasks/${draggableId}`, {
@@ -90,22 +98,34 @@ export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarP
       });
 
       if (!res.ok) {
+        // Only rollback if this is still the latest sequence for this task
+        if (dragSequence.current.get(draggableId) === currentSequence) {
+          setLocal((prev) =>
+            prev.map((t) =>
+              t.id === draggableId ? { ...t, scheduledDate: previousDate } : t
+            )
+          );
+        }
+        return;
+      }
+      onReload();
+    } catch {
+      // Only rollback if this is still the latest sequence for this task
+      if (dragSequence.current.get(draggableId) === currentSequence) {
         setLocal((prev) =>
           prev.map((t) =>
             t.id === draggableId ? { ...t, scheduledDate: previousDate } : t
           )
         );
-        return;
       }
-      onReload();
-    } catch {
-      setLocal((prev) =>
-        prev.map((t) =>
-          t.id === draggableId ? { ...t, scheduledDate: previousDate } : t
-        )
-      );
     } finally {
-      pendingIds.current.delete(draggableId);
+      // Decrement refcount; delete if it hits zero
+      const newRefcount = (pendingRefcount.current.get(draggableId) ?? 1) - 1;
+      if (newRefcount <= 0) {
+        pendingRefcount.current.delete(draggableId);
+      } else {
+        pendingRefcount.current.set(draggableId, newRefcount);
+      }
     }
   }
 
