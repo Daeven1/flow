@@ -10,7 +10,15 @@ When executing an implementation plan, always use the **subagent-driven developm
 
 ## Deployment
 
-**Vercel does not auto-deploy. Always manually deploy after pushing.** Use the `vercel:deploy` skill with the `prod` argument at the end of every session after pushing to origin.
+**Vercel auto-deploys from `main` via the GitHub integration. Pushing to `main` IS deploying to production.** Verified 2026-08-23: a push to `main` produced the production deployment `flow-git-main-daeven1s-projects.vercel.app` with no CLI command run.
+
+Consequences:
+
+- **Never push to `main` with work that isn't ready to be live.** Use a feature branch; branch pushes create harmless preview deployments.
+- **Apply schema changes to the database BEFORE pushing.** `npm run build` runs `prisma generate && next build` and never migrates. Once the generated client knows about a new column, every query on that model selects it — so pushing a schema change ahead of the migration breaks every page reading that model, not just the new feature.
+- A manual `vercel --prod` still works and is useful for deploying uncommitted local work, but it is not required after a push to `main`, and running both creates two production deployments.
+
+**Note:** `npx prisma db push` requires outbound access to the Supabase pooler on ports 5432/6543. That has been unreachable from this machine (DNS resolves; both ports time out). When it is, apply the change as SQL in the Supabase dashboard's SQL Editor instead — it works over HTTPS.
 
 ## End of session
 
