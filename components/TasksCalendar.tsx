@@ -88,16 +88,24 @@ export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarP
     pendingRefcount.current.set(draggableId, refcount);
 
     try {
-      const res = await fetch(`/api/tasks/${draggableId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduledDate: nextDate, schedulePinned: !toTray }),
-      });
+      let saved = false;
+      try {
+        const res = await fetch(`/api/tasks/${draggableId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scheduledDate: nextDate, schedulePinned: !toTray }),
+        });
+        saved = res.ok;
+        if (!saved) {
+          console.error(
+            `Failed to reschedule task ${draggableId}: server responded with ${res.status}`
+          );
+        }
+      } catch (err) {
+        console.error(`Failed to reschedule task ${draggableId}:`, err);
+      }
 
-      if (!res.ok) {
-        console.error(
-          `Failed to reschedule task ${draggableId}: server responded with ${res.status}`
-        );
+      if (!saved) {
         // Only rollback if this is still the latest sequence for this task
         if (dragSequence.current.get(draggableId) === currentSequence) {
           setLocal((prev) =>
@@ -108,16 +116,12 @@ export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarP
         }
         return;
       }
-      await onReload();
-    } catch (err) {
-      console.error(`Failed to reschedule task ${draggableId}:`, err);
-      // Only rollback if this is still the latest sequence for this task
-      if (dragSequence.current.get(draggableId) === currentSequence) {
-        setLocal((prev) =>
-          prev.map((t) =>
-            t.id === draggableId ? { ...t, scheduledDate: previousDate } : t
-          )
-        );
+
+      // Saved. Refresh page state, but never roll back a persisted change.
+      try {
+        await onReload();
+      } catch (err) {
+        console.error("Rescheduled, but refreshing the task list failed:", err);
       }
     } finally {
       // Decrement refcount; delete if it hits zero
