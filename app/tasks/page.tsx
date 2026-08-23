@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useModeContext, type Mode } from "@/components/ModeProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SPRINT_LABELS, SPRINT_COLORS, formatMinutes, formatRelativeDate, urgencySort } from "@/lib/utils";
-import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, Star, RefreshCw, Trash2, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, Star, RefreshCw, Trash2, ChevronDown, ChevronUp, ExternalLink, List, CalendarDays } from "lucide-react";
 import { parseISO, startOfDay } from "date-fns";
+import { TasksCalendar } from "@/components/TasksCalendar";
 
 type FilterMode = "all" | "1" | "2" | "3" | "4" | "done";
 
@@ -69,6 +70,8 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState<FilterMode>("all");
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [view, setView] = useState<"list" | "calendar">("list");
+  const [workNightDays, setWorkNightDays] = useState<number[]>([1]);
 
   // New task form
   const [showForm, setShowForm] = useState(false);
@@ -107,19 +110,29 @@ export default function TasksPage() {
 
   const load = useCallback(async () => {
     await fetch("/api/recurring/spawn", { method: "POST" });
-    const [tasksRes, presetsRes, recurringRes] = await Promise.all([
+    const [tasksRes, presetsRes, recurringRes, settingsRes] = await Promise.all([
       fetch(`/api/tasks?context=${mode}`),
       fetch("/api/presets"),
       fetch("/api/recurring"),
+      fetch("/api/settings"),
     ]);
     setTasks(await tasksRes.json());
     setPresets(await presetsRes.json());
     setRecurringTasks(await recurringRes.json());
+    const settings = await settingsRes.json();
+    if (Array.isArray(settings?.workNightDays)) setWorkNightDays(settings.workNightDays);
   }, [mode]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("grove-tasks-view");
+    if (saved === "calendar" || saved === "list") setView(saved);
+  }, []);
+
+  const openTasks = useMemo(() => tasks.filter((t) => !t.done), [tasks]);
 
   function applyPreset(presetId: string) {
     const preset = presets.find((p) => p.id === presetId);
@@ -307,10 +320,35 @@ export default function TasksPage() {
           <h1 className={`text-xl font-bold ${headingCls}`}>Tasks</h1>
           <p className={`text-xs ${mutedCls} mt-0.5`}>Your full task backlog — add, filter by sprint, and manage everything in one place.</p>
         </div>
-        <Button size="sm" onClick={() => setShowForm(!showForm)}>
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
-          Add task
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-md border border-slate-200 dark:border-zinc-800 overflow-hidden">
+            {([
+              { value: "list" as const, label: "List", Icon: List },
+              { value: "calendar" as const, label: "Calendar", Icon: CalendarDays },
+            ]).map(({ value, label, Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setView(value);
+                  localStorage.setItem("grove-tasks-view", value);
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
+                  view === value
+                    ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white font-medium"
+                    : "text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-900"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+          <Button size="sm" onClick={() => setShowForm(!showForm)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Add task
+          </Button>
+        </div>
       </div>
 
       {/* Add task form */}
@@ -377,6 +415,14 @@ export default function TasksPage() {
         </div>
       )}
 
+      {view === "calendar" ? (
+        <TasksCalendar
+          tasks={openTasks}
+          workNightDays={workNightDays}
+          onReload={load}
+        />
+      ) : (
+        <>
       {/* Filter chips */}
       <div className="flex gap-1.5 flex-wrap">
         {FILTERS.map(({ value, label }) => {
@@ -819,6 +865,8 @@ export default function TasksPage() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
