@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DragDropContext,
   Droppable,
@@ -34,10 +34,23 @@ function sortForColumn(list: CalendarTask[]) {
 export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarProps) {
   const [local, setLocal] = useState<CalendarTask[]>(tasks);
   const [windowStart, setWindowStart] = useState(() => startOfDay(new Date()));
+  const pendingIds = useRef<Set<string>>(new Set());
 
-  // Keep the optimistic copy in step with fresh server data
+  // Keep the optimistic copy in step with fresh server data, preserving pending optimistic updates
   useEffect(() => {
-    setLocal(tasks);
+    setLocal((prev) => {
+      const merged = [...tasks];
+      for (const pendingId of pendingIds.current) {
+        const local = prev.find((t) => t.id === pendingId);
+        if (local) {
+          const idx = merged.findIndex((t) => t.id === pendingId);
+          if (idx !== -1) {
+            merged[idx] = local;
+          }
+        }
+      }
+      return merged;
+    });
   }, [tasks]);
 
   const today = startOfDay(new Date());
@@ -47,7 +60,7 @@ export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarP
   function tasksForDay(dateKey: string) {
     return sortForColumn(
       local.filter(
-        (t) => t.scheduledDate && format(parseISO(t.scheduledDate), "yyyy-MM-dd") === dateKey
+        (t) => t.scheduledDate && t.scheduledDate.slice(0, 10) === dateKey
       )
     );
   }
@@ -59,22 +72,41 @@ export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarP
     const toTray = destination.droppableId === "tray";
     const nextDate = toTray ? null : destination.droppableId.slice("day:".length);
 
-    const snapshot = local;
+    // Capture the previous scheduledDate for rollback
+    const previousDate = local.find((t) => t.id === draggableId)?.scheduledDate ?? null;
+
+    // Optimistically update UI
     setLocal((prev) =>
       prev.map((t) => (t.id === draggableId ? { ...t, scheduledDate: nextDate } : t))
     );
 
-    const res = await fetch(`/api/tasks/${draggableId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scheduledDate: nextDate, schedulePinned: !toTray }),
-    });
+    pendingIds.current.add(draggableId);
 
-    if (!res.ok) {
-      setLocal(snapshot);
-      return;
+    try {
+      const res = await fetch(`/api/tasks/${draggableId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledDate: nextDate, schedulePinned: !toTray }),
+      });
+
+      if (!res.ok) {
+        setLocal((prev) =>
+          prev.map((t) =>
+            t.id === draggableId ? { ...t, scheduledDate: previousDate } : t
+          )
+        );
+        return;
+      }
+      onReload();
+    } catch {
+      setLocal((prev) =>
+        prev.map((t) =>
+          t.id === draggableId ? { ...t, scheduledDate: previousDate } : t
+        )
+      );
+    } finally {
+      pendingIds.current.delete(draggableId);
     }
-    onReload();
   }
 
   return (
