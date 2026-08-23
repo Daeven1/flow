@@ -4,21 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import {
   DragDropContext,
   Droppable,
-  Draggable,
   type DropResult,
 } from "@hello-pangea/dnd";
 import { addDays, format, parseISO, startOfDay } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { SprintBadge } from "@/components/SprintBadge";
-import { UrgencyBadge } from "@/components/UrgencyBadge";
-import { CalendarDayColumn, type CalendarTask } from "@/components/CalendarDayColumn";
+import { CalendarDayColumn, CalendarTaskCard, type CalendarTask } from "@/components/CalendarDayColumn";
 
 const WINDOW_DAYS = 14;
 
 interface TasksCalendarProps {
   tasks: CalendarTask[];
   workNightDays: number[];
-  onReload: () => void;
+  onReload: () => void | Promise<void>;
 }
 
 function sortForColumn(list: CalendarTask[]) {
@@ -98,6 +95,9 @@ export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarP
       });
 
       if (!res.ok) {
+        console.error(
+          `Failed to reschedule task ${draggableId}: server responded with ${res.status}`
+        );
         // Only rollback if this is still the latest sequence for this task
         if (dragSequence.current.get(draggableId) === currentSequence) {
           setLocal((prev) =>
@@ -108,8 +108,9 @@ export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarP
         }
         return;
       }
-      onReload();
-    } catch {
+      await onReload();
+    } catch (err) {
+      console.error(`Failed to reschedule task ${draggableId}:`, err);
       // Only rollback if this is still the latest sequence for this task
       if (dragSequence.current.get(draggableId) === currentSequence) {
         setLocal((prev) =>
@@ -163,7 +164,7 @@ export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarP
 
         <div className="flex gap-3 items-start">
           {/* Unscheduled tray */}
-          <div className="shrink-0 w-52 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+          <div className="sticky top-4 self-start shrink-0 w-52 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
             <div className="px-2.5 py-2 border-b border-slate-100 dark:border-zinc-800">
               <span className="text-xs font-medium text-slate-700 dark:text-zinc-200">
                 Unscheduled
@@ -187,26 +188,7 @@ export function TasksCalendar({ tasks, workNightDays, onReload }: TasksCalendarP
                     </p>
                   )}
                   {unscheduled.map((task, index) => (
-                    <Draggable key={task.id} draggableId={task.id} index={index}>
-                      {(dragProvided, dragSnapshot) => (
-                        <div
-                          ref={dragProvided.innerRef}
-                          {...dragProvided.draggableProps}
-                          {...dragProvided.dragHandleProps}
-                          className={`rounded-md border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-1.5 space-y-1 ${
-                            dragSnapshot.isDragging ? "shadow-lg" : ""
-                          }`}
-                        >
-                          <p className="text-xs leading-snug text-slate-700 dark:text-zinc-200">
-                            {task.name}
-                          </p>
-                          <div className="flex items-center gap-1 flex-wrap">
-                            <SprintBadge sprint={task.sprint} size="sm" />
-                            {task.deadline && <UrgencyBadge dueDate={task.deadline} />}
-                          </div>
-                        </div>
-                      )}
-                    </Draggable>
+                    <CalendarTaskCard key={task.id} task={task} index={index} />
                   ))}
                   {provided.placeholder}
                 </div>

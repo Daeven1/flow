@@ -28,6 +28,36 @@ interface CalendarDayColumnProps {
   isPast: boolean;
 }
 
+interface CalendarTaskCardProps {
+  task: CalendarTask;
+  index: number;
+}
+
+export function CalendarTaskCard({ task, index }: CalendarTaskCardProps) {
+  return (
+    <Draggable key={task.id} draggableId={task.id} index={index}>
+      {(dragProvided, dragSnapshot) => (
+        <div
+          ref={dragProvided.innerRef}
+          {...dragProvided.draggableProps}
+          {...dragProvided.dragHandleProps}
+          className={`rounded-md border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-1.5 space-y-1 ${
+            dragSnapshot.isDragging ? "shadow-lg" : ""
+          }`}
+        >
+          <p className="text-xs leading-snug text-slate-700 dark:text-zinc-200">
+            {task.name}
+          </p>
+          <div className="flex items-center gap-1 flex-wrap">
+            <SprintBadge sprint={task.sprint} size="sm" />
+            {task.deadline && <UrgencyBadge dueDate={task.deadline} />}
+          </div>
+        </div>
+      )}
+    </Draggable>
+  );
+}
+
 export function CalendarDayColumn({
   date,
   dateKey,
@@ -93,26 +123,7 @@ export function CalendarDayColumn({
             }`}
           >
             {tasks.map((task, index) => (
-              <Draggable key={task.id} draggableId={task.id} index={index}>
-                {(dragProvided, dragSnapshot) => (
-                  <div
-                    ref={dragProvided.innerRef}
-                    {...dragProvided.draggableProps}
-                    {...dragProvided.dragHandleProps}
-                    className={`rounded-md border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-1.5 space-y-1 ${
-                      dragSnapshot.isDragging ? "shadow-lg" : ""
-                    }`}
-                  >
-                    <p className="text-xs leading-snug text-slate-700 dark:text-zinc-200">
-                      {task.name}
-                    </p>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <SprintBadge sprint={task.sprint} size="sm" />
-                      {task.deadline && <UrgencyBadge dueDate={task.deadline} />}
-                    </div>
-                  </div>
-                )}
-              </Draggable>
+              <CalendarTaskCard key={task.id} task={task} index={index} />
             ))}
             {provided.placeholder}
           </div>

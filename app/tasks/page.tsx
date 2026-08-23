@@ -329,6 +329,7 @@ export default function TasksPage() {
               <button
                 key={value}
                 type="button"
+                aria-pressed={view === value}
                 onClick={() => {
                   setView(value);
                   localStorage.setItem("grove-tasks-view", value);
