@@ -20,6 +20,7 @@ export async function PATCH(
   const data: Record<string, unknown> = {};
 
   if ("pinned" in body) data.pinned = Boolean(body.pinned);
+  if ("schedulePinned" in body) data.schedulePinned = Boolean(body.schedulePinned);
   if ("showInRegular" in body) data.showInRegular = Boolean(body.showInRegular);
   if ("sortOrder" in body) data.sortOrder = Number(body.sortOrder);
   if ("done" in body) {
@@ -39,19 +40,26 @@ export async function PATCH(
 
   if ("deadline" in body) {
     data.deadline = body.deadline ? new Date(body.deadline) : null;
-    if (body.deadline && !("scheduledDate" in body)) {
-      const existing = await prisma.task.findUnique({
-        where: { id, userId },
-      });
-      const workNightDays = await getWorkNightDays(userId);
-      data.scheduledDate = computeScheduledDate(
-        new Date(body.deadline),
-        (body.workCategory ?? existing?.workCategory ?? "STANDARD") as string,
-        Number(body.estMinutes ?? existing?.estMinutes ?? 30),
-        workNightDays
-      );
-    } else if (!body.deadline) {
-      data.scheduledDate = null;
+
+    const existing = await prisma.task.findUnique({ where: { id, userId } });
+    // A day chosen by hand on the calendar outranks the derived schedule
+    const pinned =
+      "schedulePinned" in body
+        ? Boolean(body.schedulePinned)
+        : Boolean(existing?.schedulePinned);
+
+    if (!pinned && !("scheduledDate" in body)) {
+      if (body.deadline) {
+        const workNightDays = await getWorkNightDays(userId);
+        data.scheduledDate = computeScheduledDate(
+          new Date(body.deadline),
+          (body.workCategory ?? existing?.workCategory ?? "STANDARD") as string,
+          Number(body.estMinutes ?? existing?.estMinutes ?? 30),
+          workNightDays
+        );
+      } else {
+        data.scheduledDate = null;
+      }
     }
   }
 
