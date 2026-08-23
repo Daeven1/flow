@@ -202,7 +202,7 @@ export default function DailyPage() {
       const kept = prev.filter((id) => urgentIds.has(id));
       const keptSet = new Set(kept);
       const newIds = [...urgentIds].filter((id) => !keptSet.has(id));
-      return [...kept, ...newIds];
+      return [...newIds, ...kept];
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks]);
@@ -605,9 +605,28 @@ export default function DailyPage() {
         <div className="flex items-center gap-2 px-4 py-2.5 bg-purple-50 dark:bg-purple-950 border-b border-purple-200 dark:border-purple-800">
           <Zap className="h-4 w-4 text-purple-500" />
           <span className="font-medium text-sm text-purple-700 dark:text-purple-400">Today's Forage</span>
-          <span className="text-xs text-purple-500 ml-1">
+          <span className="hidden lg:inline text-xs text-purple-500 ml-1">
             — these tasks need attention today regardless of sprint
           </span>
+          {/* Quick add to forage */}
+          <form
+            onSubmit={addToForage}
+            className="flex items-center gap-1.5 ml-auto shrink-0 rounded-md border border-purple-200 dark:border-purple-800 bg-white/70 dark:bg-purple-900/30 px-2 py-1"
+          >
+            <Plus className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="Add urgent task…"
+              value={forageInput}
+              onChange={(e) => setForageInput(e.target.value)}
+              className="w-36 sm:w-48 text-xs bg-transparent outline-none placeholder:text-purple-400 dark:placeholder:text-purple-400/70 text-slate-700 dark:text-zinc-200"
+            />
+            {forageInput.trim() && (
+              <button type="submit" disabled={addingToForage} className="text-xs text-purple-600 dark:text-purple-300 font-medium shrink-0 disabled:opacity-50">
+                {addingToForage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+              </button>
+            )}
+          </form>
         </div>
         {urgentDisplayed.length === 0 && (
           <p className="px-4 py-3 text-sm text-slate-400 dark:text-zinc-500 italic">
@@ -757,22 +776,6 @@ export default function DailyPage() {
             )}
           </Droppable>
         </DragDropContext>
-        {/* Quick add to forage */}
-        <form onSubmit={addToForage} className="flex items-center gap-2 px-4 py-2.5 border-t border-purple-100 dark:border-purple-900">
-          <Plus className="h-4 w-4 text-purple-300 dark:text-purple-800 shrink-0" />
-          <input
-            type="text"
-            placeholder="Add something urgent for today…"
-            value={forageInput}
-            onChange={(e) => setForageInput(e.target.value)}
-            className="flex-1 text-sm bg-transparent outline-none placeholder:text-purple-300 dark:placeholder:text-purple-800 text-slate-700 dark:text-zinc-300"
-          />
-          {forageInput.trim() && (
-            <button type="submit" disabled={addingToForage} className="text-xs text-purple-600 dark:text-purple-400 font-medium shrink-0 disabled:opacity-50">
-              {addingToForage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
-            </button>
-          )}
-        </form>
       </div>
 
       {/* ── Fertile Ground ── */}
