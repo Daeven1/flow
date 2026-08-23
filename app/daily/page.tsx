@@ -153,6 +153,8 @@ export default function DailyPage() {
   const [addingToGain, setAddingToGain] = useState(false);
   const [forageInput, setForageInput] = useState("");
   const [addingToForage, setAddingToForage] = useState(false);
+  const [showForageDateMenu, setShowForageDateMenu] = useState(false);
+  const [forageNotice, setForageNotice] = useState<string | null>(null);
   const [urgentCustomOrder, setUrgentCustomOrder] = useState<string[]>([]);
   const [flaggedForageIds, setFlaggedForageIds] = useState<string[]>([]);
   const [editingUrgentId, setEditingUrgentId] = useState<string | null>(null);
@@ -188,13 +190,13 @@ export default function DailyPage() {
 
   // Keep urgentCustomOrder in sync when tasks change (preserves manual order, appends new items)
   useEffect(() => {
-    const now = startOfDay(new Date());
+    const horizon = addDays(startOfDay(new Date()), 1);
     const urgentIds = new Set(
       tasks
         .filter((t) => {
           if (t.done) return false;
           if (!t.deadline) return false;
-          return startOfDay(parseISO(t.deadline)) <= now;
+          return startOfDay(parseISO(t.deadline)) <= horizon;
         })
         .map((t) => t.id)
     );
@@ -331,22 +333,34 @@ export default function DailyPage() {
     }
   }
 
-  async function addToForage(e: React.FormEvent) {
-    e.preventDefault();
+  async function createForageTask(dateStr: string) {
     if (!forageInput.trim() || addingToForage) return;
     setAddingToForage(true);
     const name = forageInput.trim();
     setForageInput("");
+    setShowForageDateMenu(false);
     try {
       await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, sprint: 1, estMinutes: 30, workCategory: "STANDARD", deadline: todayStr, context: mode }),
+        body: JSON.stringify({ name, sprint: 1, estMinutes: 30, workCategory: "STANDARD", deadline: dateStr, context: mode }),
       });
+      // Anything past tomorrow lands outside Forage — say where it went
+      const dropped = startOfDay(parseISO(dateStr));
+      if (dropped > addDays(startOfDay(new Date()), 1)) {
+        setForageNotice(`Added “${name}” for ${format(dropped, "EEE d MMM")} — see Coming Up`);
+        setTimeout(() => setForageNotice(null), 6000);
+      }
       loadData();
     } finally {
       setAddingToForage(false);
     }
+  }
+
+  // Enter adds for today; the Add button opens the date menu instead
+  function addToForage(e: React.FormEvent) {
+    e.preventDefault();
+    createForageTask(todayStr);
   }
 
   function handleUrgentDragEnd(result: DropResult) {
@@ -416,11 +430,12 @@ export default function DailyPage() {
   const weekTaskCount = doneToday.length + doneThisWeek.length;
   const streak = computeStreak(tasks);
 
-  // ⚡ Auto-escalated: deadline is today, from ANY sprint
+  // 🍇 Today's Forage: deadline falls today or tomorrow, from ANY sprint
+  const forageHorizon = addDays(today, 1);
   const urgentNow = openTasks.filter((t) => {
     if (!t.deadline) return false;
     const dl = startOfDay(parseISO(t.deadline));
-    return dl <= today;
+    return dl <= forageHorizon;
   });
   const urgentIds = new Set(urgentNow.map((t) => t.id));
 
@@ -601,36 +616,79 @@ export default function DailyPage() {
       </div>
 
       {/* ── 🍇 TODAY'S FORAGE ── */}
-      <div className="rounded border-2 border-purple-300 dark:border-purple-800 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-purple-50 dark:bg-purple-950 border-b border-purple-200 dark:border-purple-800">
+      <div className="rounded border-2 border-purple-300 dark:border-purple-800">
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-t bg-purple-50 dark:bg-purple-950 border-b border-purple-200 dark:border-purple-800">
           <Zap className="h-4 w-4 text-purple-500" />
           <span className="font-medium text-sm text-purple-700 dark:text-purple-400">Today's Forage</span>
-          <span className="hidden lg:inline text-xs text-purple-500 ml-1">
-            — these tasks need attention today regardless of sprint
-          </span>
           {/* Quick add to forage */}
           <form
             onSubmit={addToForage}
-            className="flex items-center gap-1.5 ml-auto shrink-0 rounded-md border border-purple-200 dark:border-purple-800 bg-white/70 dark:bg-purple-900/30 px-2 py-1"
+            className="relative flex items-center gap-1.5 ml-auto shrink-0 rounded-md border border-purple-200 dark:border-purple-800 bg-white/70 dark:bg-purple-900/30 px-2 py-1"
           >
             <Plus className="h-3.5 w-3.5 text-purple-400 shrink-0" />
             <input
               type="text"
-              placeholder="Add urgent task…"
+              placeholder="Add something for today…"
               value={forageInput}
               onChange={(e) => setForageInput(e.target.value)}
               className="w-36 sm:w-48 text-xs bg-transparent outline-none placeholder:text-purple-400 dark:placeholder:text-purple-400/70 text-slate-700 dark:text-zinc-200"
             />
             {forageInput.trim() && (
-              <button type="submit" disabled={addingToForage} className="text-xs text-purple-600 dark:text-purple-300 font-medium shrink-0 disabled:opacity-50">
-                {addingToForage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+              <button
+                type="button"
+                onClick={() => setShowForageDateMenu((v) => !v)}
+                disabled={addingToForage}
+                className="flex items-center gap-0.5 text-xs text-purple-600 dark:text-purple-300 font-medium shrink-0 disabled:opacity-50"
+              >
+                {addingToForage ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <>Add<ChevronDown className="h-3 w-3" /></>
+                )}
               </button>
+            )}
+            {showForageDateMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowForageDateMenu(false)} />
+                <div className="absolute right-0 top-full mt-1.5 z-20 w-48 rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-zinc-900 shadow-lg p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => createForageTask(todayStr)}
+                    className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-purple-50 dark:hover:bg-purple-900/40 text-slate-700 dark:text-zinc-200"
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => createForageTask(format(addDays(today, 1), "yyyy-MM-dd"))}
+                    className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-purple-50 dark:hover:bg-purple-900/40 text-slate-700 dark:text-zinc-200"
+                  >
+                    Tomorrow
+                  </button>
+                  <div className="mt-1 pt-1.5 border-t border-purple-100 dark:border-purple-900">
+                    <span className="block px-2 pb-1 text-[10px] uppercase tracking-wide text-purple-400">
+                      Pick a date
+                    </span>
+                    <input
+                      type="date"
+                      min={todayStr}
+                      onChange={(e) => e.target.value && createForageTask(e.target.value)}
+                      className="w-full text-xs px-2 py-1 rounded bg-transparent border border-purple-200 dark:border-purple-800 text-slate-700 dark:text-zinc-200 outline-none"
+                    />
+                  </div>
+                </div>
+              </>
             )}
           </form>
         </div>
+        {forageNotice && (
+          <div className="px-4 py-1.5 text-xs text-purple-600 dark:text-purple-300 bg-purple-50/60 dark:bg-purple-950/60 border-b border-purple-100 dark:border-purple-900">
+            {forageNotice}
+          </div>
+        )}
         {urgentDisplayed.length === 0 && (
           <p className="px-4 py-3 text-sm text-slate-400 dark:text-zinc-500 italic">
-            Nothing urgent today — add anything that can&apos;t wait.
+            Nothing on for today or tomorrow — add whatever you&apos;re picking up.
           </p>
         )}
         <DragDropContext onDragEnd={handleUrgentDragEnd}>
