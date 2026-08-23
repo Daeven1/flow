@@ -85,7 +85,6 @@ No new routes.
 |---|---|
 | Drop on a day | `{ scheduledDate: "<yyyy-MM-dd>", schedulePinned: true }` |
 | Drop on the Unscheduled tray | `{ scheduledDate: null, schedulePinned: false }` |
-| Reorder within a day | `{ sortOrder: <n> }` per affected task |
 
 `GET /api/tasks` needs no change — it already returns `scheduledDate` and will
 include the new field automatically.
@@ -140,8 +139,9 @@ One day column:
    error surfaces — the same pattern already used for Forage drag ordering and
    the `showInRegular` toggle.
 
-Reordering within a column writes `sortOrder` for that column's tasks, matching
-project-detail reordering.
+Cards within a column are ordered by sprint, then by deadline soonest-first —
+the ordering convention used elsewhere in the app. Manual reordering inside a day
+is deliberately excluded; see §9.
 
 ---
 
@@ -175,6 +175,13 @@ No test runner exists in this project, so verification is:
 
 ## 9. Out of scope
 
+- **Manual reordering within a day.** The obvious field for it, `Task.sortOrder`,
+  is already written by project-detail drag reordering as an index within a single
+  project's task list (`app/projects/[id]/page.tsx:270`). A day column mixes tasks
+  from several projects, so writing `sortOrder` from the calendar would scramble
+  the order shown on those project pages. Supporting both would need a separate
+  field (e.g. `dayOrder`), which is not worth adding before the calendar has been
+  used. Columns sort by sprint then deadline instead.
 - Times of day; tasks stay day-granular.
 - Multi-day spans.
 - Scheduling at the project level.
