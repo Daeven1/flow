@@ -22,16 +22,17 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useModeContext } from "./ModeProvider";
+import { useUserMode } from "./UserModeProvider";
 
-const NAV_ITEMS = [
+const NAV_ITEMS: { href: string; label: string; icon: typeof CalendarDays; teacherOnly?: boolean }[] = [
   { href: "/daily", label: "Daily", icon: CalendarDays },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/projects", label: "Projects", icon: FolderKanban },
-  { href: "/sprints", label: "Sprints", icon: Layers },
+  { href: "/sprints", label: "Sprints", icon: Layers, teacherOnly: true },
   { href: "/focus", label: "Focus", icon: Crosshair },
   { href: "/time", label: "Time", icon: Clock },
   { href: "/review", label: "Review", icon: BarChart2 },
-  { href: "/templates", label: "Templates", icon: LayoutTemplate },
+  { href: "/templates", label: "Templates", icon: LayoutTemplate, teacherOnly: true },
   { href: "/lists", label: "Lists", icon: Bookmark },
 ];
 
@@ -87,6 +88,8 @@ export function Nav() {
   }
 
   const { mode, setMode } = useModeContext();
+  const { userMode } = useUserMode();
+  const visibleNavItems = NAV_ITEMS.filter((item) => !item.teacherOnly || userMode === "TEACHER");
 
   async function signOut() {
     const supabase = createClient();
@@ -108,7 +111,7 @@ export function Nav() {
 
       {/* Nav links */}
       <div className="flex items-center gap-0.5 flex-1 overflow-x-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {visibleNavItems.map(({ href, label, icon: Icon }) => {
           const active =
             pathname === href || pathname.startsWith(href + "/");
           return (
