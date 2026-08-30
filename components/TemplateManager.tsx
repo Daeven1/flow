@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { SPRINT_LABELS, formatMinutes } from "@/lib/utils";
+import { getSprintLabels, getWorkCategoryLabel, formatMinutes } from "@/lib/utils";
+import { useUserMode } from "@/components/UserModeProvider";
 import {
   ChevronDown, ChevronRight, Plus, Trash2, Pencil, Check, X, GripVertical,
 } from "lucide-react";
@@ -32,6 +33,7 @@ interface Template {
 }
 
 export function TemplateManager() {
+  const { userMode } = useUserMode();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<Set<string>>(new Set());
@@ -294,7 +296,7 @@ export function TemplateManager() {
                               <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 {[1,2,3,4].map((s) => (
-                                  <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                                  <SelectItem key={s} value={String(s)} className="text-xs">{getSprintLabels(userMode)[s]}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -323,8 +325,8 @@ export function TemplateManager() {
                             <Select value={task.workCategory} onValueChange={(v) => updateTask(template.id, i, "workCategory", v)}>
                               <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="STANDARD" className="text-xs">📅 Prep</SelectItem>
-                                <SelectItem value="GRADING" className="text-xs">🌙 Night</SelectItem>
+                                <SelectItem value="STANDARD" className="text-xs">{getWorkCategoryLabel("STANDARD", userMode, "short")}</SelectItem>
+                                <SelectItem value="GRADING" className="text-xs">{getWorkCategoryLabel("GRADING", userMode, "short")}</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>

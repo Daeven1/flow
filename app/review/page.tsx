@@ -5,7 +5,8 @@ import { useModeContext } from "@/components/ModeProvider";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SprintBadge } from "@/components/SprintBadge";
-import { SPRINT_COLORS, SPRINT_LABELS, formatMinutes } from "@/lib/utils";
+import { SPRINT_COLORS, getSprintLabels, formatMinutes } from "@/lib/utils";
+import { useUserMode } from "@/components/UserModeProvider";
 import { AlertTriangle, CheckCircle2, TrendingUp, Clock, Save } from "lucide-react";
 import {
   BarChart,
@@ -46,6 +47,7 @@ interface ReviewData {
 
 export default function ReviewPage() {
   const { mode } = useModeContext();
+  const { userMode } = useUserMode();
   const [data, setData] = useState<ReviewData | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -86,7 +88,7 @@ export default function ReviewPage() {
 
   const chartData = data.sprintBreakdown.map((s) => ({
     name: `S${s.sprint}`,
-    label: SPRINT_LABELS[s.sprint],
+    label: getSprintLabels(userMode)[s.sprint],
     actual: s.actual,
     est: s.est,
   }));

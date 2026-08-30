@@ -6,6 +6,7 @@ import { Moon } from "lucide-react";
 import { SprintBadge } from "@/components/SprintBadge";
 import { UrgencyBadge } from "@/components/UrgencyBadge";
 import { formatMinutes } from "@/lib/utils";
+import { useUserMode } from "@/components/UserModeProvider";
 
 export interface CalendarTask {
   id: string;
@@ -67,6 +68,7 @@ export function CalendarDayColumn({
   isWorkNight,
   isPast,
 }: CalendarDayColumnProps) {
+  const { userMode } = useUserMode();
   const totalMins = tasks.reduce((s, t) => s + t.estMinutes, 0);
 
   return (
@@ -103,7 +105,10 @@ export function CalendarDayColumn({
             {format(date, "d")}
           </span>
           {isWorkNight && (
-            <Moon className="h-3 w-3 text-indigo-400 shrink-0" aria-label="Work night" />
+            <Moon
+              className="h-3 w-3 text-indigo-400 shrink-0"
+              aria-label={userMode === "STUDENT" ? "After school" : "Work night"}
+            />
           )}
           {totalMins > 0 && (
             <span className="ml-auto text-[10px] tabular-nums text-slate-400 dark:text-zinc-500">

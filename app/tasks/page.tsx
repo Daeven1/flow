@@ -13,7 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SPRINT_LABELS, SPRINT_COLORS, formatMinutes, formatRelativeDate, urgencySort } from "@/lib/utils";
+import { SPRINT_COLORS, formatMinutes, formatRelativeDate, urgencySort, getSprintLabels, getWorkCategoryLabel } from "@/lib/utils";
+import { useUserMode } from "@/components/UserModeProvider";
 import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, Star, RefreshCw, Trash2, ChevronDown, ChevronUp, ExternalLink, List, CalendarDays } from "lucide-react";
 import { parseISO, startOfDay } from "date-fns";
 import { TasksCalendar } from "@/components/TasksCalendar";
@@ -61,6 +62,7 @@ interface RecurringTask {
 
 export default function TasksPage() {
   const { mode } = useModeContext();
+  const { userMode } = useUserMode();
   const headingCls = mode === "PERSONAL" ? "text-lime-900" : "text-slate-900 dark:text-white";
   const mutedCls   = mode === "PERSONAL" ? "text-yellow-700" : "text-zinc-500 dark:text-zinc-400";
   const cardCls    = mode === "PERSONAL"
@@ -385,7 +387,7 @@ export default function TasksPage() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {[1, 2, 3, 4].map((s) => (
-                    <SelectItem key={s} value={String(s)}>{SPRINT_LABELS[s]}</SelectItem>
+                    <SelectItem key={s} value={String(s)}>{getSprintLabels(userMode)[s]}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -395,8 +397,8 @@ export default function TasksPage() {
               <Select value={newCategory} onValueChange={setNewCategory}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="STANDARD">📅 Prep period</SelectItem>
-                  <SelectItem value="GRADING">🌙 Work night</SelectItem>
+                  <SelectItem value="STANDARD">{getWorkCategoryLabel("STANDARD", userMode)}</SelectItem>
+                  <SelectItem value="GRADING">{getWorkCategoryLabel("GRADING", userMode)}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -482,7 +484,7 @@ export default function TasksPage() {
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {[1, 2, 3, 4].map((s) => (
-                          <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                          <SelectItem key={s} value={String(s)} className="text-xs">{getSprintLabels(userMode)[s]}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -492,8 +494,8 @@ export default function TasksPage() {
                     <Select value={editCategory} onValueChange={setEditCategory}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="STANDARD" className="text-xs">📅 Prep period</SelectItem>
-                        <SelectItem value="GRADING" className="text-xs">🌙 Work night</SelectItem>
+                        <SelectItem value="STANDARD" className="text-xs">{getWorkCategoryLabel("STANDARD", userMode)}</SelectItem>
+                        <SelectItem value="GRADING" className="text-xs">{getWorkCategoryLabel("GRADING", userMode)}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -722,7 +724,7 @@ export default function TasksPage() {
                     <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {[1, 2, 3, 4].map((s) => (
-                        <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                        <SelectItem key={s} value={String(s)} className="text-xs">{getSprintLabels(userMode)[s]}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

@@ -10,7 +10,8 @@ import { UrgencyBadge } from "@/components/UrgencyBadge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { formatMinutes, SPRINT_LABELS, formatRelativeDate } from "@/lib/utils";
+import { formatMinutes, formatRelativeDate, getSprintLabels, getWorkCategoryLabel } from "@/lib/utils";
+import { useUserMode } from "@/components/UserModeProvider";
 import {
   Plus, Trash2, ChevronDown, ChevronRight, CheckCircle2, Circle,
   Pencil, Check, X, BookmarkPlus, Moon, CalendarClock, Wand2,
@@ -57,6 +58,7 @@ interface Preset {
 }
 
 export default function ProjectsPage() {
+  const { userMode } = useUserMode();
   const [projects, setProjects] = useState<Project[]>([]);
   const [templates, setTemplates] = useState<DBTemplate[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
@@ -487,7 +489,7 @@ export default function ProjectsPage() {
                                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                                   <SelectContent>
                                     {[1,2,3,4].map((s) => (
-                                      <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                                      <SelectItem key={s} value={String(s)} className="text-xs">{getSprintLabels(userMode)[s]}</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
@@ -497,8 +499,8 @@ export default function ProjectsPage() {
                                 <Select value={editCategory} onValueChange={setEditCategory}>
                                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="STANDARD" className="text-xs">📅 Prep period</SelectItem>
-                                    <SelectItem value="GRADING" className="text-xs">🌙 Work night</SelectItem>
+                                    <SelectItem value="STANDARD" className="text-xs">{getWorkCategoryLabel("STANDARD", userMode)}</SelectItem>
+                                    <SelectItem value="GRADING" className="text-xs">{getWorkCategoryLabel("GRADING", userMode)}</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -616,7 +618,7 @@ export default function ProjectsPage() {
                               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 {[1,2,3,4].map((s) => (
-                                  <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                                  <SelectItem key={s} value={String(s)} className="text-xs">{getSprintLabels(userMode)[s]}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -626,8 +628,8 @@ export default function ProjectsPage() {
                             <Select value={newTaskCategory} onValueChange={setNewTaskCategory}>
                               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="STANDARD" className="text-xs">📅 Prep period</SelectItem>
-                                <SelectItem value="GRADING" className="text-xs">🌙 Work night</SelectItem>
+                                <SelectItem value="STANDARD" className="text-xs">{getWorkCategoryLabel("STANDARD", userMode)}</SelectItem>
+                                <SelectItem value="GRADING" className="text-xs">{getWorkCategoryLabel("GRADING", userMode)}</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>

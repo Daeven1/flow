@@ -37,9 +37,10 @@ import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea
 import {
   formatMinutes,
   formatRelativeDate,
-  SPRINT_LABELS,
+  getSprintLabels,
   SPRINT_COLORS,
 } from "@/lib/utils";
+import { useUserMode } from "@/components/UserModeProvider";
 import { format, startOfDay, startOfWeek, parseISO, addDays, differenceInCalendarDays } from "date-fns";
 
 interface Task {
@@ -128,6 +129,7 @@ function RainbowIcon({ active }: { active: boolean }) {
 export default function DailyPage() {
   const todayStr = format(startOfDay(new Date()), "yyyy-MM-dd");
   const { mode } = useModeContext();
+  const { userMode } = useUserMode();
 
   const headingCls = mode === "PERSONAL" ? "text-lime-900" : "text-slate-900 dark:text-white";
   const mutedCls   = mode === "PERSONAL" ? "text-yellow-700" : "text-zinc-500 dark:text-zinc-400";
@@ -728,7 +730,7 @@ export default function DailyPage() {
                                   <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
                                   <SelectContent>
                                     {[1, 2, 3, 4].map((s) => (
-                                      <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                                      <SelectItem key={s} value={String(s)} className="text-xs">{getSprintLabels(userMode)[s]}</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
@@ -943,7 +945,7 @@ export default function DailyPage() {
                         </SelectTrigger>
                         <SelectContent>
                           {[1, 2, 3, 4].map((s) => (
-                            <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>
+                            <SelectItem key={s} value={String(s)} className="text-xs">{getSprintLabels(userMode)[s]}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1056,7 +1058,7 @@ export default function DailyPage() {
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                      <span className="text-xs font-medium">{SPRINT_LABELS[sprint]}</span>
+                      <span className="text-xs font-medium">{getSprintLabels(userMode)[sprint]}</span>
                     </div>
                     <span className="text-xs text-slate-400 dark:text-zinc-500">{formatMinutes(sprintMins)}</span>
                   </div>

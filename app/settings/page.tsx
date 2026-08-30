@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { SPRINT_LABELS, formatMinutes } from "@/lib/utils";
+import { getSprintLabels, getWorkCategoryLabel, formatMinutes } from "@/lib/utils";
+import { useUserMode } from "@/components/UserModeProvider";
 import { Check, Plus, Pencil, X, Trash2 } from "lucide-react";
 import { TemplateManager } from "@/components/TemplateManager";
 
@@ -31,6 +32,7 @@ interface Preset {
 
 
 export default function SettingsPage() {
+  const { refresh: refreshUserMode } = useUserMode();
   const [workNightDays, setWorkNightDays] = useState<number[]>([1]);
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -102,6 +104,7 @@ export default function SettingsPage() {
       setUserMode(target);
       setModeSwitchTarget(null);
       await loadAll();
+      await refreshUserMode();
     } catch {
       alert("Failed to switch mode. Please try again.");
     } finally {
@@ -317,7 +320,7 @@ export default function SettingsPage() {
                     <Select value={editPresetSprint} onValueChange={setEditPresetSprint}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {[1,2,3,4].map((s) => <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>)}
+                        {[1,2,3,4].map((s) => <SelectItem key={s} value={String(s)} className="text-xs">{getSprintLabels(userMode)[s]}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -328,8 +331,8 @@ export default function SettingsPage() {
                     <Select value={editPresetCategory} onValueChange={setEditPresetCategory}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="STANDARD" className="text-xs">📅 Prep</SelectItem>
-                        <SelectItem value="GRADING" className="text-xs">🌙 Night</SelectItem>
+                        <SelectItem value="STANDARD" className="text-xs">{getWorkCategoryLabel("STANDARD", userMode, "short")}</SelectItem>
+                        <SelectItem value="GRADING" className="text-xs">{getWorkCategoryLabel("GRADING", userMode, "short")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -346,12 +349,12 @@ export default function SettingsPage() {
               <div key={p.id} className="grid grid-cols-12 gap-2 px-4 py-2.5 items-center group text-sm">
                 <div className="col-span-4 font-medium text-sm truncate">{p.name}</div>
                 <div className="col-span-2 text-xs" style={{ color: p.sprint === 1 ? "#E24B4A" : p.sprint === 2 ? "#BA7517" : p.sprint === 3 ? "#378ADD" : "#7F77DD" }}>
-                  {SPRINT_LABELS[p.sprint]}
+                  {getSprintLabels(userMode)[p.sprint]}
                 </div>
                 <div className="col-span-1 text-xs font-semibold tabular-nums">{formatMinutes(p.estMinutes)}</div>
                 <div className="col-span-2 text-xs">
                   <span className={`px-1.5 py-0.5 rounded ${p.workCategory === "GRADING" ? "bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"}`}>
-                    {p.workCategory === "GRADING" ? "🌙 Night" : "📅 Prep"}
+                    {getWorkCategoryLabel(p.workCategory, userMode, "short")}
                   </span>
                 </div>
                 <div className="col-span-2 text-xs text-zinc-400 truncate">{p.notes}</div>
@@ -374,7 +377,7 @@ export default function SettingsPage() {
                   <Select value={newPresetSprint} onValueChange={setNewPresetSprint}>
                     <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {[1,2,3,4].map((s) => <SelectItem key={s} value={String(s)} className="text-xs">{SPRINT_LABELS[s]}</SelectItem>)}
+                      {[1,2,3,4].map((s) => <SelectItem key={s} value={String(s)} className="text-xs">{getSprintLabels(userMode)[s]}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -385,8 +388,8 @@ export default function SettingsPage() {
                   <Select value={newPresetCategory} onValueChange={setNewPresetCategory}>
                     <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="STANDARD" className="text-xs">📅 Prep</SelectItem>
-                      <SelectItem value="GRADING" className="text-xs">🌙 Night</SelectItem>
+                      <SelectItem value="STANDARD" className="text-xs">{getWorkCategoryLabel("STANDARD", userMode, "short")}</SelectItem>
+                      <SelectItem value="GRADING" className="text-xs">{getWorkCategoryLabel("GRADING", userMode, "short")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
