@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { differenceInCalendarDays, startOfDay, addDays, format } from "date-fns";
+import type { UserMode } from "@/components/UserModeProvider";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -69,6 +70,48 @@ export const SPRINT_LABELS: Record<number, string> = {
   3: "S3 Admin",
   4: "S4 Deep Work",
 };
+
+export const STUDENT_SPRINT_LABELS: Record<number, string> = {
+  1: "S1 Urgent",
+  2: "S2 Deadlines",
+  3: "S3 Quick Tasks",
+  4: "S4 Deep Work",
+};
+
+/** Sprint 3 reads "Admin" for teachers, "Quick Tasks" for students; S1/S2/S4 are identical in both modes. */
+export function getSprintLabels(userMode: UserMode): Record<number, string> {
+  return userMode === "STUDENT" ? STUDENT_SPRINT_LABELS : SPRINT_LABELS;
+}
+
+const WORK_CATEGORY_LABELS: Record<
+  UserMode,
+  { standard: string; grading: string; standardShort: string; gradingShort: string }
+> = {
+  TEACHER: {
+    standard: "📅 Prep period",
+    grading: "🌙 Work night",
+    standardShort: "📅 Prep",
+    gradingShort: "🌙 Night",
+  },
+  STUDENT: {
+    standard: "📅 During school",
+    grading: "🌙 After school",
+    standardShort: "📅 School",
+    gradingShort: "🌙 Home",
+  },
+};
+
+/** workCategory "STANDARD"/"GRADING" as user-facing text. `variant: "short"` for tight table cells. */
+export function getWorkCategoryLabel(
+  workCategory: string,
+  userMode: UserMode,
+  variant: "full" | "short" = "full"
+): string {
+  const labels = WORK_CATEGORY_LABELS[userMode];
+  const isGrading = workCategory === "GRADING";
+  if (variant === "short") return isGrading ? labels.gradingShort : labels.standardShort;
+  return isGrading ? labels.grading : labels.standard;
+}
 
 export const SPRINT_CAPACITY = 120; // minutes
 
