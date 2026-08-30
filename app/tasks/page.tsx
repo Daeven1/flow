@@ -308,10 +308,10 @@ export default function TasksPage() {
 
   const FILTERS: { value: FilterMode; label: string }[] = [
     { value: "all", label: "All open" },
-    { value: "1", label: "S1 Urgent" },
-    { value: "2", label: "S2 Deadlines" },
-    { value: "3", label: "S3 Admin" },
-    { value: "4", label: "S4 Deep Work" },
+    { value: "1", label: getSprintLabels(userMode)[1] },
+    { value: "2", label: getSprintLabels(userMode)[2] },
+    { value: "3", label: getSprintLabels(userMode)[3] },
+    { value: "4", label: getSprintLabels(userMode)[4] },
     { value: "done", label: "Done" },
   ];
 
