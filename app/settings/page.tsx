@@ -247,7 +247,7 @@ export default function SettingsPage() {
           <h2 className="font-medium">Work Nights</h2>
           <p className="text-xs text-zinc-500 mt-1">
             Which evenings do you do focused grading & assessment work? Tasks tagged
-            as <span className="font-medium">🌙 Work night</span> will be scheduled
+            as <span className="font-medium">{getWorkCategoryLabel("GRADING", userMode)}</span> will be scheduled
             to the last selected day on or before their deadline.
           </p>
         </div>
