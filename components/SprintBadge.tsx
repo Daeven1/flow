@@ -1,4 +1,7 @@
-import { SPRINT_LABELS } from "@/lib/utils";
+"use client";
+
+import { getSprintLabels } from "@/lib/utils";
+import { useUserMode } from "@/components/UserModeProvider";
 
 interface SprintBadgeProps {
   sprint: number;
@@ -6,7 +9,8 @@ interface SprintBadgeProps {
 }
 
 export function SprintBadge({ sprint, size = "md" }: SprintBadgeProps) {
-  const label = SPRINT_LABELS[sprint] ?? `S${sprint}`;
+  const { userMode } = useUserMode();
+  const label = getSprintLabels(userMode)[sprint] ?? `S${sprint}`;
   const classMap: Record<number, string> = {
     1: "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900",
     2: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900",
