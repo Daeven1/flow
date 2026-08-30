@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
 import { ModeProvider } from "@/components/ModeProvider";
+import { UserModeProvider } from "@/components/UserModeProvider";
 import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -48,10 +49,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body
         className={`${inter.className} bg-[#E0EFFE] dark:bg-[#0D1B2E] text-slate-900 dark:text-zinc-100 min-h-screen`}
       >
-        <ModeProvider>
-          <Nav />
-          <main className="max-w-5xl mx-auto px-4 py-8">{children}</main>
-        </ModeProvider>
+        <UserModeProvider>
+          <ModeProvider>
+            <Nav />
+            <main className="max-w-5xl mx-auto px-4 py-8">{children}</main>
+          </ModeProvider>
+        </UserModeProvider>
         <Analytics />
       </body>
     </html>

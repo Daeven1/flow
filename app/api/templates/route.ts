@@ -52,9 +52,12 @@ export async function DELETE() {
   const userId = await getUser();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  await prisma.template.deleteMany({ where: { userId } });
-  for (let i = 0; i < TEMPLATES.length; i++) {
-    const t = TEMPLATES[i];
+  const settings = await prisma.userSettings.findUnique({ where: { id: userId } });
+  const templates = settings?.userMode === "STUDENT" ? STUDENT_TEMPLATES : TEMPLATES;
+
+  await prisma.template.deleteMany({ where: { userId, isCustom: false } });
+  for (let i = 0; i < templates.length; i++) {
+    const t = templates[i];
     await prisma.template.create({
       data: {
         userId,
