@@ -27,8 +27,9 @@ export async function GET(req: Request) {
   const days = Number.isFinite(parsed) ? Math.min(31, Math.max(1, Math.trunc(parsed))) : 7;
 
   const now = new Date();
-  // Grove stores date-only values (scheduledDate) at UTC midnight, so "today"
-  // is the Shanghai calendar date expressed at UTC midnight.
+  // Grove stores date-only values (scheduledDate, and a deadline with no time)
+  // at UTC midnight, so "today" is the Shanghai calendar date expressed at UTC
+  // midnight; a deadline due today stays in the feed all day.
   const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(now);
   const startOfToday = new Date(`${ymd}T00:00:00Z`);
   const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
               userId: { in: ids },
               done: false,
               OR: [
-                { deadline: { gte: now, lte: until } },
+                { deadline: { gte: startOfToday, lte: until } },
                 { scheduledDate: { gte: startOfToday, lte: until } },
               ],
             },
