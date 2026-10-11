@@ -22,12 +22,15 @@ function authorised(req: Request): boolean {
 export async function GET(req: Request) {
   if (!authorised(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const raw = Number(new URL(req.url).searchParams.get("days") ?? 7);
-  const days = Number.isFinite(raw) ? Math.min(31, Math.max(1, Math.trunc(raw))) : 7;
+  const rawDays = new URL(req.url).searchParams.get("days");
+  const parsed = rawDays && rawDays.trim() !== "" ? Number(rawDays) : NaN;
+  const days = Number.isFinite(parsed) ? Math.min(31, Math.max(1, Math.trunc(parsed))) : 7;
 
   const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setUTCHours(0, 0, 0, 0);
+  // Grove stores date-only values (scheduledDate) at UTC midnight, so "today"
+  // is the Shanghai calendar date expressed at UTC midnight.
+  const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(now);
+  const startOfToday = new Date(`${ymd}T00:00:00Z`);
   const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
   const emails = (process.env.JARVIS_GROVE_EMAILS ?? "")
@@ -35,35 +38,39 @@ export async function GET(req: Request) {
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
 
-  const people = [];
-  for (const email of emails) {
-    const rows = await prisma.$queryRaw<{ id: string }[]>`SELECT id::text FROM auth.users WHERE lower(email) = ${email}`;
-    const ids = rows.map((r) => r.id);
-    const tasks = ids.length
-      ? await prisma.task.findMany({
-          where: {
-            userId: { in: ids },
-            done: false,
-            OR: [
-              { deadline: { gte: now, lte: until } },
-              { scheduledDate: { gte: startOfToday, lte: until } },
-            ],
-          },
-          include: { project: true },
-          orderBy: [{ deadline: "asc" }],
-        })
-      : [];
-    people.push({
-      email,
-      tasks: tasks.map((t) => ({
-        id: t.id,
-        name: t.name,
-        deadline: t.deadline ? t.deadline.toISOString() : null,
-        scheduledDate: t.scheduledDate ? t.scheduledDate.toISOString() : null,
-        project: t.project ? t.project.name : null,
-      })),
-    });
+  try {
+    const people = [];
+    for (const email of emails) {
+      const rows = await prisma.$queryRaw<{ id: string }[]>`SELECT id::text FROM auth.users WHERE lower(email) = ${email}`;
+      const ids = rows.map((r) => r.id);
+      const tasks = ids.length
+        ? await prisma.task.findMany({
+            where: {
+              userId: { in: ids },
+              done: false,
+              OR: [
+                { deadline: { gte: now, lte: until } },
+                { scheduledDate: { gte: startOfToday, lte: until } },
+              ],
+            },
+            include: { project: { select: { name: true } } },
+            orderBy: [{ deadline: "asc" }],
+          })
+        : [];
+      people.push({
+        email,
+        tasks: tasks.map((t) => ({
+          id: t.id,
+          name: t.name,
+          deadline: t.deadline ? t.deadline.toISOString() : null,
+          scheduledDate: t.scheduledDate ? t.scheduledDate.toISOString() : null,
+          project: t.project ? t.project.name : null,
+        })),
+      });
+    }
+    return NextResponse.json({ people });
+  } catch (err) {
+    console.error("jarvis/upcoming failed", err);
+    return NextResponse.json({ error: "Upstream error" }, { status: 500 });
   }
-
-  return NextResponse.json({ people });
 }

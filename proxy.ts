@@ -31,8 +31,11 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+  // /api/jarvis/ routes authenticate with JARVIS_TOKEN themselves (no session).
   const isPublicPath =
-    pathname.startsWith("/login") || pathname.startsWith("/auth");
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/api/jarvis/");
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
