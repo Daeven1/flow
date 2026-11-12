@@ -572,6 +572,7 @@ export default function DailyPage() {
                   <span className="text-xs text-slate-400 dark:text-zinc-500 ml-auto tabular-nums">
                     {formatMinutes(task.estMinutes)}
                   </span>
+                  <RemoveTaskButton onRemove={() => deleteTask(task.id)} />
                 </div>
               ))}
             </div>
@@ -616,6 +617,9 @@ export default function DailyPage() {
                         {format(new Date(task.doneAt), "EEE")}
                       </span>
                     )}
+                    <span className={task.doneAt ? "" : "ml-auto"}>
+                      <RemoveTaskButton onRemove={() => deleteTask(task.id)} />
+                    </span>
                   </div>
                 ))}
               </div>
