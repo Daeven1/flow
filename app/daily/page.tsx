@@ -33,6 +33,7 @@ import {
   X,
   ExternalLink,
 } from "lucide-react";
+import RemoveTaskButton from "@/components/RemoveTaskButton";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import {
   formatMinutes,
@@ -314,6 +315,12 @@ export default function DailyPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ done }),
     });
+    loadData();
+  }
+
+  async function deleteTask(id: string) {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    await fetch(`/api/tasks/${id}`, { method: "DELETE" });
     loadData();
   }
 
@@ -824,6 +831,7 @@ export default function DailyPage() {
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </button>
+                              <RemoveTaskButton onRemove={() => deleteTask(task.id)} />
                             </div>
                           )}
                         </div>
@@ -1087,6 +1095,7 @@ export default function DailyPage() {
                           </span>
                         )}
                         <span className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
+                        <RemoveTaskButton onRemove={() => deleteTask(task.id)} />
                       </div>
                     ))}
                   </div>
@@ -1121,6 +1130,7 @@ export default function DailyPage() {
                 )}
                 <SprintBadge sprint={task.sprint} size="sm" />
                 <span className="text-xs tabular-nums shrink-0">{formatMinutes(task.estMinutes)}</span>
+                <RemoveTaskButton onRemove={() => deleteTask(task.id)} />
               </div>
             ))}
           </div>

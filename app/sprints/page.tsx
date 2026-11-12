@@ -22,6 +22,7 @@ import {
   urgencySort,
 } from "@/lib/utils";
 import { CheckCircle2, Circle, Pencil, Check, X, Moon, CalendarClock, Zap, Star } from "lucide-react";
+import RemoveTaskButton from "@/components/RemoveTaskButton";
 import { parseISO, compareAsc, startOfDay, addDays, differenceInCalendarDays } from "date-fns";
 
 interface Task {
@@ -73,6 +74,12 @@ export default function SprintsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ done }),
     });
+    load();
+  }
+
+  async function deleteTask(id: string) {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    await fetch(`/api/tasks/${id}`, { method: "DELETE" });
     load();
   }
 
@@ -391,6 +398,7 @@ export default function SprintsPage() {
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
+                        <RemoveTaskButton onRemove={() => deleteTask(task.id)} />
                       </div>
                     )
                   )}

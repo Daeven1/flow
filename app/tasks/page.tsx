@@ -16,6 +16,7 @@ import {
 import { SPRINT_COLORS, formatMinutes, formatRelativeDate, urgencySort, getSprintLabels, getWorkCategoryLabel } from "@/lib/utils";
 import { useUserMode } from "@/components/UserModeProvider";
 import { Plus, CheckCircle2, Circle, X, Pencil, Check, Moon, CalendarClock, Wand2, Star, RefreshCw, Trash2, ChevronDown, ChevronUp, ExternalLink, List, CalendarDays } from "lucide-react";
+import RemoveTaskButton from "@/components/RemoveTaskButton";
 import { parseISO, startOfDay } from "date-fns";
 import { TasksCalendar } from "@/components/TasksCalendar";
 
@@ -605,13 +606,7 @@ export default function TasksPage() {
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
-                  <button
-                    onClick={() => deleteTask(task.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-red-500 transition-colors"
-                    title="Delete task"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <RemoveTaskButton onRemove={() => deleteTask(task.id)} />
                 </div>
               </div>
             )

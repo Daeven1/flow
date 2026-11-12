@@ -16,6 +16,7 @@ import {
   Plus, Trash2, CheckCircle2, Circle, Pencil, Check, X,
   Moon, CalendarClock, Wand2, ChevronLeft, GripVertical, Globe, ExternalLink,
 } from "lucide-react";
+import RemoveTaskButton from "@/components/RemoveTaskButton";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { format } from "date-fns";
 
@@ -550,12 +551,7 @@ export default function ProjectDetailPage() {
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
-                            <button
-                              onClick={() => deleteTask(task.id)}
-                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-red-500 transition-colors shrink-0"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                            <RemoveTaskButton onRemove={() => deleteTask(task.id)} />
                           </div>
                         )}
                       </Draggable>

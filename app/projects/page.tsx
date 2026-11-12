@@ -17,6 +17,7 @@ import {
   Pencil, Check, X, BookmarkPlus, Moon, CalendarClock, Wand2,
   GripVertical, ArrowUpRight, CheckSquare, Square, ExternalLink,
 } from "lucide-react";
+import RemoveTaskButton from "@/components/RemoveTaskButton";
 import { format, parseISO } from "date-fns";
 
 interface Task {
@@ -571,12 +572,7 @@ export default function ProjectsPage() {
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
-                            <button
-                              onClick={() => deleteTask(task.id)}
-                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-red-500 transition-colors shrink-0"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                            <RemoveTaskButton onRemove={() => deleteTask(task.id)} />
                           </div>
                         )
                       )
