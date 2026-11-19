@@ -72,18 +72,20 @@ export function judge(
 export function segments(s: SavedSession, endedAt: number): Segment[] {
   const end = Math.min(endedAt, endsAt(s));
   const out: Segment[] = [];
-  let prev = s.startedAt;
+  // Round cumulative boundaries, not each piece, so the pieces add up to
+  // round(total) and can never exceed the planned length.
+  let prevMin = 0;
+  const take = (taskId: string, boundary: number) => {
+    const cum = Math.max(prevMin, toMinutes(Math.min(boundary, end) - s.startedAt));
+    out.push({ taskId, minutes: cum - prevMin });
+    prevMin = cum;
+  };
 
-  for (const t of s.ticks) {
-    out.push({ taskId: t.taskId, minutes: toMinutes(t.at - prev) });
-    prev = t.at;
-  }
+  for (const t of s.ticks) take(t.taskId, t.at);
 
   const ticked = new Set(s.ticks.map((t) => t.taskId));
   const next = s.taskIds.find((id) => !ticked.has(id));
-  if (next !== undefined) {
-    out.push({ taskId: next, minutes: toMinutes(end - prev) });
-  }
+  if (next !== undefined) take(next, end);
 
   return out.filter((seg) => seg.minutes > 0);
 }

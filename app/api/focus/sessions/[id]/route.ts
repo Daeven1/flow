@@ -43,6 +43,7 @@ export async function PATCH(
           sprint: task.sprint,
           estMinutes: task.estMinutes,
           actualMinutes: seg.minutes,
+          date: input.endedAt,
         },
       });
       await tx.task.update({

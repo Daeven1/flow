@@ -15,3 +15,6 @@ CREATE TABLE "FocusSession" (
 
 -- CreateIndex
 CREATE INDEX "FocusSession_userId_idx" ON "FocusSession"("userId");
+
+-- Prisma's role bypasses RLS; this keeps the table closed to Supabase's Data API.
+ALTER TABLE "FocusSession" ENABLE ROW LEVEL SECURITY;

@@ -16,6 +16,20 @@ test("parseEnd clamps and totals", () => {
   const ok = parseEnd({ outcome: "CLEARED", endedAt: "2026-11-19T02:09:00.000Z", segments: [{ taskId: "a", minutes: 9 }] }, 25);
   expect(ok?.segments).toEqual([{ taskId: "a", minutes: 9 }]);
   expect(parseEnd({ outcome: "COMPLETED", endedAt: "2026-11-19T02:25:00.000Z",
-    segments: [{ taskId: "a", minutes: 20 }, { taskId: "b", minutes: 20 }] }, 25)).toBeNull();
+    segments: [{ taskId: "a", minutes: 20 }, { taskId: "b", minutes: 20 }] }, 25)?.segments)
+    .toEqual([{ taskId: "a", minutes: 20 }, { taskId: "b", minutes: 5 }]);
   expect(parseEnd({ outcome: "WON", endedAt: "2026-11-19T02:25:00.000Z", segments: [] }, 25)).toBeNull();
+});
+test("parseEnd clamps a negative segment to 0 and an over-length one to the plan", () => {
+  const e = "2026-11-19T02:25:00.000Z";
+  expect(parseEnd({ outcome: "COMPLETED", endedAt: e, segments: [{ taskId: "a", minutes: -4 }] }, 25)?.segments)
+    .toEqual([{ taskId: "a", minutes: 0 }]);
+  expect(parseEnd({ outcome: "COMPLETED", endedAt: e, segments: [{ taskId: "a", minutes: 90 }] }, 25)?.segments)
+    .toEqual([{ taskId: "a", minutes: 25 }]);
+});
+test("parseEnd trims overflow across several segments, never below 0", () => {
+  const e = "2026-11-19T02:25:00.000Z";
+  const out = parseEnd({ outcome: "COMPLETED", endedAt: e,
+    segments: [{ taskId: "a", minutes: 25 }, { taskId: "b", minutes: 10 }, { taskId: "c", minutes: 10 }] }, 25);
+  expect(out?.segments).toEqual([{ taskId: "a", minutes: 25 }, { taskId: "b", minutes: 0 }, { taskId: "c", minutes: 0 }]);
 });

@@ -47,11 +47,11 @@ export function parsePending(raw: string | null): SavedSession[] {
 function validate(v: unknown): SavedSession | null {
   if (!isObj(v)) return null;
 
-  if (!(v.id === null || typeof v.id === "string")) return null;
+  if (!(v.id === null || (typeof v.id === "string" && v.id.length > 0))) return null;
   if (!isNum(v.startedAt)) return null;
   if (!isNum(v.plannedMinutes) || !(LENGTHS as number[]).includes(v.plannedMinutes)) return null;
   if (typeof v.rule !== "string" || !RULES.includes(v.rule)) return null;
-  if (!Array.isArray(v.taskIds) || !v.taskIds.every((t) => typeof t === "string")) return null;
+  if (!Array.isArray(v.taskIds) || v.taskIds.length === 0 || !v.taskIds.every((t) => typeof t === "string")) return null;
   if (
     !Array.isArray(v.ticks) ||
     !v.ticks.every((t) => isObj(t) && typeof t.taskId === "string" && isNum(t.at))

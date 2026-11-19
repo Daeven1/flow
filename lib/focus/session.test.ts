@@ -77,6 +77,35 @@ describe("focus session", () => {
     const s = base({ ticks: [{ taskId: "a", at: T0 + 10_000 }, { taskId: "b", at: T0 + 9 * MIN }] });
     expect(segments(s, T0 + 9 * MIN)).toEqual([{ taskId: "b", minutes: 9 }]);
   });
+  test("segments round cumulatively so the total never exceeds the plan", () => {
+    const s = base({
+      taskIds: ["a", "b", "c"],
+      ticks: [
+        { taskId: "a", at: T0 + 8 * MIN + 36_000 },
+        { taskId: "b", at: T0 + 17 * MIN + 12_000 },
+      ],
+    });
+    const out = segments(s, T0 + 25 * MIN);
+    expect(out).toEqual([
+      { taskId: "a", minutes: 9 }, { taskId: "b", minutes: 8 }, { taskId: "c", minutes: 8 },
+    ]);
+    expect(out.reduce((n, x) => n + x.minutes, 0)).toBeLessThanOrEqual(25);
+  });
+  test("segments cumulative rounding when the list is cleared just before the end", () => {
+    const s = base({
+      taskIds: ["a", "b", "c"],
+      ticks: [
+        { taskId: "a", at: T0 + 8 * MIN + 30_000 },
+        { taskId: "b", at: T0 + 17 * MIN },
+        { taskId: "c", at: T0 + 24 * MIN + 54_000 },
+      ],
+    });
+    const out = segments(s, T0 + 24 * MIN + 54_000);
+    expect(out).toEqual([
+      { taskId: "a", minutes: 9 }, { taskId: "b", minutes: 8 }, { taskId: "c", minutes: 8 },
+    ]);
+    expect(out.reduce((n, x) => n + x.minutes, 0)).toBeLessThanOrEqual(25);
+  });
   test("clock text", () => {
     expect(formatClock(24 * MIN + 6_200)).toBe("24:07");
     expect(formatClock(0)).toBe("0:00");

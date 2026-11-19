@@ -28,17 +28,23 @@ export function SessionEnd({ session, onNew }: Props) {
 
   if (!ended) return null;
 
-  const minutes = Math.max(1, Math.round((ended.at - session.startedAt) / 60_000));
+  const minutes = Math.min(
+    session.plannedMinutes,
+    Math.max(0, Math.round((ended.at - session.startedAt) / 60_000)),
+  );
   const minutesText = `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
   const canBreak = ended.outcome === "COMPLETED" || ended.outcome === "CLEARED";
 
   let message: string;
   switch (ended.outcome) {
     case "COMPLETED":
-      message = `Session complete. ${minutesText} of focus.`;
+      message = minutes === 0 ? "Session complete." : `Session complete. ${minutesText} of focus.`;
       break;
     case "CLEARED":
-      message = `List cleared in ${minutesText}. Nicely done.`;
+      message =
+        minutes === 0
+          ? "List cleared in under a minute. Nicely done."
+          : `List cleared in ${minutesText}. Nicely done.`;
       break;
     case "LEFT":
       message =

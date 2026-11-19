@@ -212,7 +212,9 @@ export function useFocusSession(): FocusSessionApi {
 
   const syncAll = useCallback(() => {
     void sync();
-    void flushPending();
+    // never flush while the current session is mid-sync: the same start could be POSTed twice
+    if (syncing.current) flushWanted.current = true;
+    else void flushPending();
   }, [sync, flushPending]);
 
   const running = !!session && !session.ended;

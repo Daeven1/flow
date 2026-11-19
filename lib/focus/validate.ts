@@ -53,6 +53,12 @@ export function parseEnd(body: unknown, plannedMinutes: number): EndInput | null
     total += minutes;
     segments.push({ taskId: s.taskId, minutes });
   }
-  if (total > plannedMinutes) return null;
+  // Safety net: trim any overflow from the last segments backwards.
+  let over = total - plannedMinutes;
+  for (let i = segments.length - 1; i >= 0 && over > 0; i--) {
+    const cut = Math.min(segments[i].minutes, over);
+    segments[i] = { ...segments[i], minutes: segments[i].minutes - cut };
+    over -= cut;
+  }
   return { outcome, endedAt, segments };
 }

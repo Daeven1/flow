@@ -25,6 +25,11 @@ test("parseSaved rejects bad rule, ticks and ended", () => {
   expect(parseSaved(JSON.stringify({ ...valid, ticks: [{ taskId: 1, at: 2 }] }))).toBeNull();
   expect(parseSaved(JSON.stringify({ ...valid, ended: { outcome: "WON", at: 1, synced: false } }))).toBeNull();
 });
+test("parseSaved rejects an empty id and an empty task list", () => {
+  expect(parseSaved(JSON.stringify({ ...valid, id: "" }))).toBeNull();
+  expect(parseSaved(JSON.stringify({ ...valid, taskIds: [] }))).toBeNull();
+  expect(parseSaved(JSON.stringify({ ...valid, id: null }))).toEqual({ ...valid, id: null });
+});
 test("parseSaved round-trips a valid session", () => {
   expect(parseSaved(JSON.stringify(valid))).toEqual(valid);
 });

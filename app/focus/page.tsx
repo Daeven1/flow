@@ -105,8 +105,14 @@ export default function FocusPage() {
   }
 
   function handleNewSession() {
+    // Carry over what was not ticked, in order, if it still exists and is not done.
+    const prev = focus.session;
+    const ticked = new Set(prev?.ticks.map((t) => t.taskId) ?? []);
+    const leftover = (prev?.taskIds ?? []).filter(
+      (id) => !ticked.has(id) && modeTasks.some((t) => t.id === id && !t.done),
+    );
     focus.clear();
-    setQueue([]);
+    setQueue(leftover);
     setChoosing(false);
     void loadTasks();
     void loadNames();
