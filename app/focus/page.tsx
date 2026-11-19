@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useModeContext } from "@/components/ModeProvider";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { GripVertical } from "lucide-react";
@@ -11,6 +11,9 @@ import { SessionSetup } from "@/components/focus/SessionSetup";
 import { SessionView, type PileTask } from "@/components/focus/SessionView";
 import { SessionEnd } from "@/components/focus/SessionEnd";
 import { useFocusSession } from "@/lib/focus/useFocusSession";
+import { useGrove } from "@/lib/grove/useGrove";
+import { Grove } from "@/components/grove/Grove";
+import { plantCount } from "@/components/focus/groveText";
 
 type Task = {
   id: string;
@@ -31,6 +34,8 @@ export default function FocusPage() {
   const [choosing, setChoosing] = useState(false);
   const [loading, setLoading] = useState(true);
   const focus = useFocusSession();
+  const grove = useGrove();
+  const setupRef = useRef<HTMLDivElement>(null);
 
   const fetchList = useCallback(async (url: string): Promise<Task[]> => {
     const res = await fetch(url);
@@ -70,6 +75,13 @@ export default function FocusPage() {
   useEffect(() => {
     if (choosing && queue.length === 0) setChoosing(false);
   }, [choosing, queue.length]);
+
+  // Choosing a session hides the grove at the top, so the page shifts up; keep the setup in view.
+  useEffect(() => {
+    if (!choosing) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setupRef.current?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+  }, [choosing]);
 
   function toggle(id: string) {
     setQueue((prev) =>
@@ -116,6 +128,7 @@ export default function FocusPage() {
     setChoosing(false);
     void loadTasks();
     void loadNames();
+    grove.refresh();
   }
 
   if (!focus.ready || (loading && !focus.session)) {
@@ -126,21 +139,32 @@ export default function FocusPage() {
     );
   }
 
+  const running = focus.session !== null && !focus.session.ended;
+  const groveCount = grove.plants.length;
+
   const queuedTasks = queue
     .map((id) => tasks.find((t) => t.id === id))
     .filter((t): t is Task => t !== undefined);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className={running ? "space-y-3" : "space-y-6"}>
+      {/* Header: smaller during a session, so the grove, the note and its buttons fit without scrolling */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+          <h1
+            className={
+              running
+                ? "text-base font-semibold text-slate-700 dark:text-zinc-300"
+                : "text-xl font-bold text-slate-900 dark:text-white"
+            }
+          >
             Focus Mode
           </h1>
-          <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-            Pick your tasks, choose a session, and stay with it
-          </p>
+          {!running && (
+            <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
+              Pick your tasks, choose a session, and stay with it
+            </p>
+          )}
         </div>
       </div>
 
@@ -156,12 +180,36 @@ export default function FocusPage() {
                 name: names === "loaded" ? "A task that's no longer on your list" : "Task",
               },
           )}
+          plants={grove.plants}
           onComplete={handleTick}
           onGiveUp={focus.giveUp}
         />
       ) : focus.session?.ended ? (
-        <SessionEnd session={focus.session} onNew={handleNewSession} />
+        <SessionEnd session={focus.session} plants={grove.plants} onNew={handleNewSession} />
       ) : (
+        <div className="space-y-6">
+        {/* The grove at rest. Hidden while choosing a session: the setup shows its own, pickable. */}
+        {!choosing && grove.status !== "failed" && (
+          <div className="flex flex-col items-center gap-1">
+            <Grove
+              plants={grove.plants}
+              label={groveCount === 0 ? "Your grove: empty" : `Your grove: ${plantCount(groveCount)}`}
+              className="w-full h-[280px]"
+              fallback={null}
+            />
+            <p className="min-h-[20px] text-sm text-slate-600 dark:text-zinc-400">
+              {grove.status === "loaded" &&
+                (groveCount === 0
+                  ? "Your grove is ready for its first plant."
+                  : `${plantCount(groveCount)} in your grove`)}
+            </p>
+          </div>
+        )}
+        {!choosing && grove.status === "failed" && (
+          <p className="text-sm text-slate-600 dark:text-zinc-400 text-center">
+            Your grove couldn&apos;t load just now. Your plants are safe.
+          </p>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
           {/* Task list */}
           <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-5">
@@ -275,8 +323,13 @@ export default function FocusPage() {
             )}
 
             {choosing && queue.length > 0 ? (
-              <div className="space-y-4">
-                <SessionSetup taskIds={queue} onStart={focus.start} />
+              <div ref={setupRef} className="space-y-4 scroll-mt-4">
+                <SessionSetup
+                  taskIds={queue}
+                  plants={grove.plants}
+                  groveStatus={grove.status}
+                  onStart={focus.start}
+                />
                 <button
                   type="button"
                   onClick={() => setChoosing(false)}
@@ -296,6 +349,7 @@ export default function FocusPage() {
               </button>
             )}
           </div>
+        </div>
         </div>
       )}
     </div>

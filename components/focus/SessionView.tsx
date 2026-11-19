@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { StickyPile } from "@/components/StickyPile";
+import { Grove, type Growing } from "@/components/grove/Grove";
+import type { GrovePlant } from "@/lib/grove/layout";
+import { NO_WEBGL_LINE, OnFallback, plantCount, speciesName } from "@/components/focus/groveText";
 import {
   formatClock,
   progress,
@@ -43,6 +46,7 @@ type Props = {
   now: number;
   wakeLockOk: boolean | null;
   tasks: PileTask[]; // every task in the session, in queue order
+  plants: GrovePlant[]; // the grove as it stands, without this session's plant
   onComplete: (taskId: string) => void; // ticks one task off
   onGiveUp: () => void;
 };
@@ -50,11 +54,14 @@ type Props = {
 const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:focus-visible:outline-blue-400";
 
-export function SessionView({ session, now, wakeLockOk, tasks, onComplete, onGiveUp }: Props) {
+export function SessionView({ session, now, wakeLockOk, tasks, plants, onComplete, onGiveUp }: Props) {
   const [confirming, setConfirming] = useState(false);
+  const [noWebGL, setNoWebGL] = useState(false);
+  const onNoWebGL = useCallback(() => setNoWebGL(true), []);
 
   const left = remainingMs(session, now);
   const minutesLeft = Math.ceil(left / 60_000);
+  const p = progress(session, now);
 
   // Ticked tasks first (in the order they were ticked), then the rest in queue order.
   const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -64,10 +71,46 @@ export function SessionView({ session, now, wakeLockOk, tasks, onComplete, onGiv
     ...tasks.filter((t) => !tickedIds.includes(t.id)),
   ];
 
+  const plant = session.plant;
+  const growing: Growing | null = plant
+    ? { species: plant.species, spot: { x: plant.x, y: plant.y }, progress: p, outcome: null }
+    : null;
+  // Side by side at lg only when the grove is drawn; the plain bar keeps piece 1's stack.
+  const withGrove = growing !== null && !noWebGL;
+  const wakeWarning = session.rule === "STRICT" && wakeLockOk === false;
+
+  const bar = (
+    <div className="w-full flex flex-col items-center gap-2 py-2">
+      <FocusVisual progress={p} outcome={null} />
+      {growing && <p className="text-sm text-slate-600 dark:text-zinc-400 text-center">{NO_WEBGL_LINE}</p>}
+    </div>
+  );
+
   return (
-    <div className="flex flex-col items-center gap-6 py-4">
-      <div className="w-full flex flex-col items-center gap-2">
-        <FocusVisual progress={progress(session, now)} outcome={null} />
+    <div
+      className={`grid grid-cols-1 gap-4 ${
+        withGrove ? "lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8 lg:items-center" : "justify-items-center"
+      }`}
+    >
+      <div className="w-full flex flex-col items-center gap-1">
+        {growing ? (
+          <Grove
+            plants={plants}
+            growing={growing}
+            label={`Your ${speciesName(growing.species, true)} ${
+              growing.species === "FERN" ? "is" : "are"
+            } growing. ${plantCount(plants.length)} in your grove`}
+            className={`w-full ${wakeWarning ? "h-[30svh]" : "h-[38svh]"} min-h-[180px] lg:h-[min(calc(100svh_-_240px),560px)] lg:min-h-[320px]`}
+            fallback={
+              <>
+                <OnFallback onShow={onNoWebGL} />
+                {bar}
+              </>
+            }
+          />
+        ) : (
+          bar
+        )}
         <div
           aria-live="off"
           className="text-sm tabular-nums text-slate-600 dark:text-zinc-400"
@@ -79,22 +122,23 @@ export function SessionView({ session, now, wakeLockOk, tasks, onComplete, onGiv
         </div>
       </div>
 
-      {session.rule === "STRICT" && wakeLockOk === false && (
-        <p className="max-w-md text-sm text-amber-900 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
-          This phone can&apos;t be kept awake from here, so keep the screen from locking yourself.
-        </p>
-      )}
+      <div className="w-full max-w-[480px] mx-auto flex flex-col items-center gap-3">
+        {wakeWarning && (
+          <p className="w-full text-sm text-amber-900 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+            This phone can&apos;t be kept awake from here, so keep the screen from locking yourself.
+          </p>
+        )}
 
-      <StickyPile
-        tasks={ordered}
-        initialIndex={tickedIds.length}
-        onComplete={onComplete}
-        onCleared={() => {}}
-      />
+        <StickyPile
+          tasks={ordered}
+          initialIndex={tickedIds.length}
+          onComplete={onComplete}
+          onCleared={() => {}}
+          compact
+        />
 
-      <div className="flex flex-col items-center gap-3">
         {confirming ? (
-          <div role="group" aria-label="Give up this session" className="flex flex-col items-center gap-3">
+          <div role="group" aria-label="Give up this session" className="flex flex-col items-center gap-2">
             <p className="text-sm text-slate-700 dark:text-zinc-300">
               Really give up? This session will be lost.
             </p>
@@ -120,7 +164,7 @@ export function SessionView({ session, now, wakeLockOk, tasks, onComplete, onGiv
           <button
             type="button"
             onClick={() => setConfirming(true)}
-            className={`min-h-[44px] px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors ${focusRing}`}
+            className={`min-h-[44px] px-3 text-sm font-medium rounded-lg text-slate-600 dark:text-zinc-400 underline-offset-4 hover:underline hover:text-slate-900 dark:hover:text-white ${focusRing}`}
           >
             Give up
           </button>

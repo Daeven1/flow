@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatClock, type SavedSession } from "@/lib/focus/session";
+import { formatClock, progress, type SavedSession } from "@/lib/focus/session";
+import { Grove, type Growing } from "@/components/grove/Grove";
+import type { GrovePlant } from "@/lib/grove/layout";
+import { plantCount } from "@/components/focus/groveText";
 
 type Props = {
   session: SavedSession; // an ended session
+  plants: GrovePlant[]; // the grove as last loaded
   onNew: () => void;
 };
 
@@ -13,7 +17,7 @@ const BREAK_MS = 5 * 60_000;
 const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:focus-visible:outline-blue-400";
 
-export function SessionEnd({ session, onNew }: Props) {
+export function SessionEnd({ session, plants, onNew }: Props) {
   const ended = session.ended;
   const [breakEnd, setBreakEnd] = useState<number | null>(null);
   const [breakUsed, setBreakUsed] = useState(false);
@@ -54,8 +58,39 @@ export function SessionEnd({ session, onNew }: Props) {
       message = "Session ended early. Nothing else has changed.";
   }
 
+  const plant = session.plant;
+  const growing: Growing | null = plant
+    ? {
+        species: plant.species,
+        spot: { x: plant.x, y: plant.y },
+        progress: progress(session, ended.at),
+        outcome: ended.outcome,
+      }
+    : null;
+  // The server's copy of this plant may already be in the list (a reload on this
+  // screen). On the same spot the grove draws it once; if the server had to move
+  // it (the spot was taken meanwhile), leave out a same-species plant planted
+  // since this session started, so it isn't drawn twice.
+  const others = growing
+    ? plants.filter(
+        (p) =>
+          !(p.x === growing.spot.x && p.y === growing.spot.y) &&
+          !(p.species === growing.species && Date.parse(p.plantedAt) >= session.startedAt),
+      )
+    : plants;
+  const total = others.length + (growing ? 1 : 0);
+
   return (
-    <div className="flex justify-center py-8">
+    <div className="flex flex-col items-center gap-4 py-4">
+      {growing && (
+        <Grove
+          plants={others}
+          growing={growing}
+          label={`Your grove: ${plantCount(total)}`}
+          className="w-full max-w-2xl h-[280px]"
+          fallback={null}
+        />
+      )}
       <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-6 space-y-5 text-center">
         <p className="text-lg font-semibold text-slate-900 dark:text-white" role="status">
           {message}

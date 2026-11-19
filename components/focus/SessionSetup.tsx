@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_LENGTH,
   LENGTHS,
@@ -8,10 +8,24 @@ import {
   type FocusRule,
   type PlannedMinutes,
 } from "@/lib/focus/session";
-import type { PlantChoice } from "@/lib/grove/layout";
+import {
+  SPECIES,
+  defaultSpot,
+  freeSpots,
+  gridSize,
+  type GrovePlant,
+  type PlantChoice,
+  type Species,
+  type Spot,
+} from "@/lib/grove/layout";
+import type { GroveStatus } from "@/lib/grove/useGrove";
+import { Grove } from "@/components/grove/Grove";
+import { OnFallback, plantCount, speciesName } from "@/components/focus/groveText";
 
 type Props = {
   taskIds: string[];
+  plants: GrovePlant[];
+  groveStatus: GroveStatus;
   onStart: (input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[]; plant: PlantChoice | null }) => void;
 };
 
@@ -32,9 +46,25 @@ function choiceClass(selected: boolean) {
   }`;
 }
 
-export function SessionSetup({ taskIds, onStart }: Props) {
+export function SessionSetup({ taskIds, plants, groveStatus, onStart }: Props) {
   const [length, setLength] = useState<PlannedMinutes>(DEFAULT_LENGTH);
   const [rule, setRule] = useState<FocusRule>("GENTLE");
+  const [species, setSpecies] = useState<Species>("WILDFLOWERS");
+  const [picked, setPicked] = useState<Spot | null>(null);
+  const [noWebGL, setNoWebGL] = useState(false);
+  const onNoWebGL = useCallback(() => setNoWebGL(true), []);
+
+  // The grid the new plant goes into. The picked spot while it is still free
+  // (the grove may reload), otherwise the default.
+  const n = gridSize(plants.length + 1);
+  const spot = useMemo(() => {
+    if (picked && freeSpots(n, plants).some((s) => s.x === picked.x && s.y === picked.y)) return picked;
+    return defaultSpot(n, plants);
+  }, [picked, n, plants]);
+
+  // Only plant into a grove we could see; a session can always start without one.
+  const plant: PlantChoice | null =
+    groveStatus === "loaded" && spot ? { species, x: spot.x, y: spot.y } : null;
 
   // Reads the device, so it runs after mount rather than during render.
   useEffect(() => {
@@ -92,9 +122,52 @@ export function SessionSetup({ taskIds, onStart }: Props) {
         <p id="focus-rule-desc" className="text-sm text-slate-600 dark:text-zinc-400 mt-2">{RULE_TEXT[rule]}</p>
       </div>
 
+      {groveStatus === "failed" ? (
+        <p className="text-sm text-slate-600 dark:text-zinc-400">
+          Your grove couldn&apos;t load, so this session won&apos;t plant anything. The timer works as usual.
+        </p>
+      ) : (
+        <div>
+          <div id="focus-plant-label" className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-zinc-400 mb-2">
+            What to grow
+          </div>
+          <div role="group" aria-labelledby="focus-plant-label" className="flex gap-2">
+            {SPECIES.map((sp) => (
+              <button
+                key={sp}
+                type="button"
+                aria-pressed={species === sp}
+                onClick={() => setSpecies(sp)}
+                className={choiceClass(species === sp)}
+              >
+                {speciesName(sp)}
+              </button>
+            ))}
+          </div>
+          <Grove
+            plants={groveStatus === "loaded" ? plants : []}
+            pickable={groveStatus === "loaded"}
+            selectedSpot={groveStatus === "loaded" ? spot : null}
+            onPickSpot={setPicked}
+            label={
+              groveStatus === "loaded"
+                ? `Choose where to plant. Your grove: ${plantCount(plants.length)}`
+                : "Loading your grove"
+            }
+            className="w-full h-[280px] mt-3"
+            fallback={<OnFallback onShow={onNoWebGL} />}
+          />
+          {!noWebGL && (
+            <p className="text-sm text-slate-600 dark:text-zinc-400 mt-2">
+              {groveStatus === "loaded" ? "A spot is picked for you. Tap another to move it." : "Loading your grove…"}
+            </p>
+          )}
+        </div>
+      )}
+
       <button
         type="button"
-        onClick={() => onStart({ plannedMinutes: length, rule, taskIds, plant: null })}
+        onClick={() => onStart({ plannedMinutes: length, rule, taskIds, plant })}
         disabled={taskIds.length === 0}
         className={`w-full min-h-[44px] py-2.5 bg-slate-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-semibold rounded-lg hover:bg-slate-700 dark:hover:bg-zinc-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`}
       >
