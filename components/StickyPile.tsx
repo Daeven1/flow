@@ -5,21 +5,24 @@ import { useState } from "react";
 type Task = {
   id: string;
   name: string;
-  sprint: number;
-  estMinutes: number;
+  sprint?: number; // left out for a task that is no longer on the list
+  estMinutes?: number;
 };
 
 type Props = {
   tasks: Task[];
   onComplete: (taskId: string) => void;
-  onAllDone: () => void;
+  onAllDone?: () => void;
+  initialIndex?: number; // where to start, for resuming a session
+  onCleared?: () => void; // called once when the last note is ticked; replaces the "All done" screen
 };
 
-export function StickyPile({ tasks, onComplete, onAllDone }: Props) {
-  const [current, setCurrent] = useState(0);
+export function StickyPile({ tasks, onComplete, onAllDone, initialIndex = 0, onCleared }: Props) {
+  const [current, setCurrent] = useState(initialIndex);
   const [peeling, setPeeling] = useState(false);
 
   if (tasks.length === 0 || current >= tasks.length) {
+    if (onCleared) return null;
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-4">
         <div className="text-4xl">🎉</div>
@@ -46,9 +49,11 @@ export function StickyPile({ tasks, onComplete, onAllDone }: Props) {
     if (peeling) return;
     setPeeling(true);
     onComplete(task.id);
+    const isLast = current + 1 >= tasks.length;
     setTimeout(() => {
       setCurrent((c) => c + 1);
       setPeeling(false);
+      if (isLast) onCleared?.();
     }, 380);
   }
 
@@ -72,12 +77,11 @@ export function StickyPile({ tasks, onComplete, onAllDone }: Props) {
 
         {/* Top note */}
         <div
-          className="absolute inset-0 bg-yellow-100 dark:bg-yellow-200 rounded-sm shadow-xl flex flex-col p-10"
-          style={{
-            transition: peeling ? "transform 0.35s ease-in, opacity 0.35s ease-in" : undefined,
-            transform: peeling ? "translateY(-120%) rotate(-4deg)" : "rotate(0deg)",
-            opacity: peeling ? 0 : 1,
-          }}
+          className={`absolute inset-0 bg-yellow-100 dark:bg-yellow-200 rounded-sm shadow-xl flex flex-col p-10 ${
+            peeling
+              ? "transition-all duration-[350ms] ease-in -translate-y-[120%] -rotate-[4deg] opacity-0 motion-reduce:transition-none motion-reduce:translate-y-0 motion-reduce:rotate-0"
+              : ""
+          }`}
         >
           <div className="text-sm font-semibold text-amber-700 opacity-60 mb-4">
             {current + 1} of {tasks.length}
@@ -86,12 +90,16 @@ export function StickyPile({ tasks, onComplete, onAllDone }: Props) {
             {task.name}
           </div>
           <div className="flex items-center gap-3 mt-6">
-            <span className="text-sm font-bold px-3 py-1 rounded bg-amber-200 text-amber-800">
-              Sprint {task.sprint}
-            </span>
-            <span className="text-sm text-amber-700 opacity-60">
-              {task.estMinutes} min
-            </span>
+            {task.sprint !== undefined && (
+              <span className="text-sm font-bold px-3 py-1 rounded bg-amber-200 text-amber-800">
+                Sprint {task.sprint}
+              </span>
+            )}
+            {task.estMinutes !== undefined && (
+              <span className="text-sm text-amber-700 opacity-60">
+                {task.estMinutes} min
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -100,7 +108,7 @@ export function StickyPile({ tasks, onComplete, onAllDone }: Props) {
       <button
         onClick={handleDone}
         disabled={peeling}
-        className="flex items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-semibold rounded-xl shadow-md hover:bg-slate-700 dark:hover:bg-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-semibold rounded-xl shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:focus-visible:outline-blue-400 hover:bg-slate-700 dark:hover:bg-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         ✓ Done — next task
       </button>

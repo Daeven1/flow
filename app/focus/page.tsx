@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useModeContext } from "@/components/ModeProvider";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { GripVertical } from "lucide-react";
 import { StickyPile } from "@/components/StickyPile";
 import { SprintBadge } from "@/components/SprintBadge";
 import { SPRINT_COLORS } from "@/lib/utils";
+import { SessionSetup } from "@/components/focus/SessionSetup";
+import { SessionView, type PileTask } from "@/components/focus/SessionView";
+import { SessionEnd } from "@/components/focus/SessionEnd";
+import { useFocusSession } from "@/lib/focus/useFocusSession";
 
 type Task = {
   id: string;
@@ -18,20 +22,28 @@ type Task = {
 
 export default function FocusPage() {
   const { mode } = useModeContext();
-  const [tasks, setTasks] = useState<Task[]>([]);
+  // Every task fetched, done or not: a running session still needs the names of ticked tasks.
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [queue, setQueue] = useState<string[]>([]);
-  const [session, setSession] = useState<Task[] | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const focus = useFocusSession();
 
-  useEffect(() => {
-    fetch(`/api/tasks?context=${mode}`)
+  const loadTasks = useCallback(() => {
+    return fetch(`/api/tasks?context=${mode}`)
       .then((r) => r.json())
       .then((data: Task[]) => {
-        setTasks(data.filter((t) => !t.done));
+        setAllTasks(data);
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, [mode]);
+
+  useEffect(() => {
+    void loadTasks();
+  }, [loadTasks]);
+
+  const tasks = allTasks.filter((t) => !t.done);
 
   function toggle(id: string) {
     setQueue((prev) =>
@@ -49,13 +61,7 @@ export default function FocusPage() {
     });
   }
 
-  function startSession() {
-    const pile = queue
-      .map((id) => tasks.find((t) => t.id === id))
-      .filter((t): t is Task => t !== undefined);
-    setSession(pile);
-  }
-
+  // Never awaited by the pile: if the save fails the pile still moves on.
   async function completeTask(taskId: string) {
     const res = await fetch(`/api/tasks/${taskId}`, {
       method: "PATCH",
@@ -63,16 +69,23 @@ export default function FocusPage() {
       body: JSON.stringify({ done: true }),
     });
     if (res.ok) {
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setAllTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, done: true } : t)));
     }
   }
 
-  function resetSession() {
-    setSession(null);
-    setQueue([]);
+  function handleTick(taskId: string) {
+    completeTask(taskId).catch(() => {});
+    focus.tick(taskId);
   }
 
-  if (loading) {
+  function handleNewSession() {
+    focus.clear();
+    setQueue([]);
+    setChoosing(false);
+    void loadTasks();
+  }
+
+  if (!focus.ready || loading) {
     return (
       <div className="flex items-center justify-center py-24 text-sm text-slate-400 dark:text-zinc-500">
         Loading tasks…
@@ -93,27 +106,28 @@ export default function FocusPage() {
             Focus Mode
           </h1>
           <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-            Pick your tasks, then work through the pile one by one
+            Pick your tasks, choose a session, and stay with it
           </p>
         </div>
-        {session && (
-          <button
-            onClick={resetSession}
-            className="px-3 py-1.5 border border-slate-200 dark:border-zinc-700 text-sm font-medium rounded-lg text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
-          >
-            ← New pile
-          </button>
-        )}
       </div>
 
-      {session ? (
-        <div className="flex justify-center py-8">
-          <StickyPile
-            tasks={session}
-            onComplete={completeTask}
-            onAllDone={resetSession}
-          />
-        </div>
+      {focus.session && !focus.session.ended ? (
+        <SessionView
+          session={focus.session}
+          now={focus.now}
+          wakeLockOk={focus.wakeLockOk}
+          tasks={focus.session.taskIds.map(
+            (id): PileTask =>
+              allTasks.find((t) => t.id === id) ?? {
+                id,
+                name: "A task that's no longer on your list",
+              },
+          )}
+          onComplete={handleTick}
+          onGiveUp={focus.giveUp}
+        />
+      ) : focus.session?.ended ? (
+        <SessionEnd session={focus.session} onNew={handleNewSession} />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
           {/* Task list */}
@@ -227,13 +241,27 @@ export default function FocusPage() {
               </DragDropContext>
             )}
 
-            <button
-              onClick={startSession}
-              disabled={queue.length === 0}
-              className="w-full py-2.5 bg-slate-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-semibold rounded-lg hover:bg-slate-700 dark:hover:bg-zinc-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Start Focus Session →
-            </button>
+            {choosing && queue.length > 0 ? (
+              <div className="space-y-4">
+                <SessionSetup taskIds={queue} onStart={focus.start} />
+                <button
+                  type="button"
+                  onClick={() => setChoosing(false)}
+                  className="w-full min-h-[44px] text-sm font-medium text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:focus-visible:outline-blue-400"
+                >
+                  ← Change tasks
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setChoosing(true)}
+                disabled={queue.length === 0}
+                className="w-full min-h-[44px] py-2.5 bg-slate-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-semibold rounded-lg hover:bg-slate-700 dark:hover:bg-zinc-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:focus-visible:outline-blue-400"
+              >
+                Choose session →
+              </button>
+            )}
           </div>
         </div>
       )}
