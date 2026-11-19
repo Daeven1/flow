@@ -22,28 +22,54 @@ type Task = {
 
 export default function FocusPage() {
   const { mode } = useModeContext();
-  // Every task fetched, done or not: a running session still needs the names of ticked tasks.
-  const [allTasks, setAllTasks] = useState<Task[]>([]);
+  // Tasks for the queue builder: this mode only.
+  const [modeTasks, setModeTasks] = useState<Task[]>([]);
+  // Names for a saved session: every mode, done or not, so ticked tasks keep their names.
+  const [nameTasks, setNameTasks] = useState<Task[]>([]);
+  const [names, setNames] = useState<"pending" | "loaded" | "failed">("pending");
   const [queue, setQueue] = useState<string[]>([]);
   const [choosing, setChoosing] = useState(false);
   const [loading, setLoading] = useState(true);
   const focus = useFocusSession();
 
+  const fetchList = useCallback(async (url: string): Promise<Task[]> => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("bad response");
+    const data: unknown = await res.json();
+    if (!Array.isArray(data)) throw new Error("not a list");
+    return data as Task[];
+  }, []);
+
   const loadTasks = useCallback(() => {
-    return fetch(`/api/tasks?context=${mode}`)
-      .then((r) => r.json())
-      .then((data: Task[]) => {
-        setAllTasks(data);
-        setLoading(false);
+    return fetchList(`/api/tasks?context=${mode}`)
+      .then((data) => setModeTasks(data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [mode, fetchList]);
+
+  const loadNames = useCallback(() => {
+    return fetchList("/api/tasks")
+      .then((data) => {
+        setNameTasks(data);
+        setNames("loaded");
       })
-      .catch(() => setLoading(false));
-  }, [mode]);
+      .catch(() => setNames((n) => (n === "loaded" ? n : "failed")));
+  }, [fetchList]);
 
   useEffect(() => {
     void loadTasks();
   }, [loadTasks]);
 
-  const tasks = allTasks.filter((t) => !t.done);
+  useEffect(() => {
+    void loadNames();
+  }, [loadNames]);
+
+  const tasks = modeTasks.filter((t) => !t.done);
+
+  // If the pile empties while choosing a session, go back to the builder.
+  useEffect(() => {
+    if (choosing && queue.length === 0) setChoosing(false);
+  }, [choosing, queue.length]);
 
   function toggle(id: string) {
     setQueue((prev) =>
@@ -69,7 +95,7 @@ export default function FocusPage() {
       body: JSON.stringify({ done: true }),
     });
     if (res.ok) {
-      setAllTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, done: true } : t)));
+      setModeTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, done: true } : t)));
     }
   }
 
@@ -83,9 +109,10 @@ export default function FocusPage() {
     setQueue([]);
     setChoosing(false);
     void loadTasks();
+    void loadNames();
   }
 
-  if (!focus.ready || loading) {
+  if (!focus.ready || (loading && !focus.session)) {
     return (
       <div className="flex items-center justify-center py-24 text-sm text-slate-400 dark:text-zinc-500">
         Loading tasks…
@@ -118,9 +145,9 @@ export default function FocusPage() {
           wakeLockOk={focus.wakeLockOk}
           tasks={focus.session.taskIds.map(
             (id): PileTask =>
-              allTasks.find((t) => t.id === id) ?? {
+              nameTasks.find((t) => t.id === id) ?? {
                 id,
-                name: "A task that's no longer on your list",
+                name: names === "loaded" ? "A task that's no longer on your list" : "Task",
               },
           )}
           onComplete={handleTick}

@@ -16,6 +16,7 @@ const focusRing =
 export function SessionEnd({ session, onNew }: Props) {
   const ended = session.ended;
   const [breakEnd, setBreakEnd] = useState<number | null>(null);
+  const [breakUsed, setBreakUsed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const breakRunning = breakEnd !== null && now < breakEnd;
@@ -28,15 +29,16 @@ export function SessionEnd({ session, onNew }: Props) {
   if (!ended) return null;
 
   const minutes = Math.max(1, Math.round((ended.at - session.startedAt) / 60_000));
+  const minutesText = `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
   const canBreak = ended.outcome === "COMPLETED" || ended.outcome === "CLEARED";
 
   let message: string;
   switch (ended.outcome) {
     case "COMPLETED":
-      message = `Session complete. ${minutes} minutes of focus.`;
+      message = `Session complete. ${minutesText} of focus.`;
       break;
     case "CLEARED":
-      message = `List cleared in ${minutes} minutes. Nicely done.`;
+      message = `List cleared in ${minutesText}. Nicely done.`;
       break;
     case "LEFT":
       message =
@@ -66,16 +68,19 @@ export function SessionEnd({ session, onNew }: Props) {
             )}
             <button
               type="button"
-              onClick={() => setBreakEnd(null)}
+              onClick={() => {
+                setBreakEnd(null);
+                setBreakUsed(true);
+              }}
               className={`min-h-[44px] px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors ${focusRing}`}
             >
-              Skip
+              {breakRunning ? "Skip" : "Done"}
             </button>
           </div>
         )}
 
         <div className="flex flex-col sm:flex-row gap-2 justify-center">
-          {canBreak && breakEnd === null && (
+          {canBreak && breakEnd === null && !breakUsed && (
             <button
               type="button"
               onClick={() => {

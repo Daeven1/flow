@@ -48,10 +48,10 @@ export function SessionSetup({ taskIds, onStart }: Props) {
   return (
     <div className="space-y-5">
       <div>
-        <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-zinc-400 mb-2">
+        <div id="focus-length-label" className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-zinc-400 mb-2">
           How long
         </div>
-        <div className="flex gap-2">
+        <div role="group" aria-labelledby="focus-length-label" className="flex gap-2">
           {LENGTHS.map((m) => (
             <button
               key={m}
@@ -67,10 +67,10 @@ export function SessionSetup({ taskIds, onStart }: Props) {
       </div>
 
       <div>
-        <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-zinc-400 mb-2">
+        <div id="focus-rule-label" className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-zinc-400 mb-2">
           Focus rule
         </div>
-        <div className="flex gap-2">
+        <div role="group" aria-labelledby="focus-rule-label" aria-describedby="focus-rule-desc" className="flex gap-2">
           <button
             type="button"
             aria-pressed={rule === "STRICT"}
@@ -88,7 +88,7 @@ export function SessionSetup({ taskIds, onStart }: Props) {
             Gentle
           </button>
         </div>
-        <p className="text-sm text-slate-600 dark:text-zinc-400 mt-2">{RULE_TEXT[rule]}</p>
+        <p id="focus-rule-desc" className="text-sm text-slate-600 dark:text-zinc-400 mt-2">{RULE_TEXT[rule]}</p>
       </div>
 
       <button
