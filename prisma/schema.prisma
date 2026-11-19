@@ -193,6 +193,23 @@ model FocusSession {
   outcome        String?   // null while running
   endedAt        DateTime?
   createdAt      DateTime  @default(now())
+  plantSpecies   String?
+  plantX         Int?
+  plantY         Int?
+
+  @@index([userId])
+}
+
+model GrovePlant {
+  id         String    @id @default(cuid())
+  userId     String
+  species    String
+  x          Int
+  y          Int
+  status     String    @default("ALIVE")
+  plantedAt  DateTime  @default(now())
+  witheredAt DateTime?
+  sessionId  String?   @unique
 
   @@index([userId])
 }

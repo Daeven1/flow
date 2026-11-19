@@ -1,4 +1,6 @@
 import { LENGTHS } from "./session";
+import { parsePlantChoice } from "@/lib/grove/layout";
+import type { PlantChoice } from "@/lib/grove/layout";
 import type { FocusRule, Outcome, PlannedMinutes, Segment } from "./session";
 
 export type StartInput = {
@@ -6,6 +8,7 @@ export type StartInput = {
   plannedMinutes: PlannedMinutes;
   rule: FocusRule;
   taskIds: string[];
+  plant: PlantChoice | null;
 };
 export type EndInput = { outcome: Outcome; endedAt: Date; segments: Segment[] };
 
@@ -33,7 +36,7 @@ export function parseStart(body: unknown): StartInput | null {
   const ids = body.taskIds;
   if (!Array.isArray(ids) || ids.length === 0) return null;
   if (!ids.every((id) => typeof id === "string" && id.length > 0)) return null;
-  return { startedAt, plannedMinutes, rule, taskIds: ids as string[] };
+  return { startedAt, plannedMinutes, rule, taskIds: ids as string[], plant: parsePlantChoice(body.plant) };
 }
 
 export function parseEnd(body: unknown, plannedMinutes: number): EndInput | null {

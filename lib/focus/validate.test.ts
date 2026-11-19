@@ -3,7 +3,20 @@ import { parseStart, parseEnd } from "./validate";
 
 test("parseStart accepts a valid body", () => {
   expect(parseStart({ startedAt: "2026-11-19T02:00:00.000Z", plannedMinutes: 25, rule: "STRICT", taskIds: ["a"] }))
-    .toEqual({ startedAt: new Date("2026-11-19T02:00:00.000Z"), plannedMinutes: 25, rule: "STRICT", taskIds: ["a"] });
+    .toEqual({ startedAt: new Date("2026-11-19T02:00:00.000Z"), plannedMinutes: 25, rule: "STRICT", taskIds: ["a"], plant: null });
+});
+test("parseStart keeps a valid plant choice", () => {
+  const base = { startedAt: "2026-11-19T02:00:00.000Z", plannedMinutes: 25, rule: "STRICT", taskIds: ["a"] };
+  expect(parseStart({ ...base, plant: { species: "FERN", x: 1, y: -2 } })?.plant)
+    .toEqual({ species: "FERN", x: 1, y: -2 });
+});
+test("parseStart drops a missing or invalid plant without rejecting", () => {
+  const base = { startedAt: "2026-11-19T02:00:00.000Z", plannedMinutes: 25, rule: "STRICT", taskIds: ["a"] };
+  expect(parseStart(base)?.plant).toBeNull();
+  expect(parseStart({ ...base, plant: null })?.plant).toBeNull();
+  const bad = parseStart({ ...base, plant: { species: "OAK", x: 0, y: 0 } });
+  expect(bad).not.toBeNull();
+  expect(bad?.plant).toBeNull();
 });
 test.each([
   [{ startedAt: "nope", plannedMinutes: 25, rule: "STRICT", taskIds: ["a"] }],

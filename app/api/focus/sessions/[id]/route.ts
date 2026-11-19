@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import { parseEnd } from "@/lib/focus/validate";
+import { witherExpiry } from "@/lib/grove/layout";
+import { planFor } from "@/lib/grove/planting";
 
 export async function PATCH(
   req: Request,
@@ -31,7 +33,26 @@ export async function PATCH(
       where: { id, userId, outcome: null },
       data: { outcome: input.outcome, endedAt: input.endedAt },
     });
-    if (claimed.count === 0 || !logTime) return;
+    if (claimed.count === 0) return;
+
+    // Only the request that won the claim plants. skipDuplicates (ON CONFLICT
+    // DO NOTHING on sessionId) keeps a duplicate from aborting the transaction.
+    const now = new Date();
+    const existing = await tx.grovePlant.findMany({
+      where: { userId },
+      select: { x: true, y: true, status: true, witheredAt: true },
+    });
+    const occupied = existing.filter(
+      (p) =>
+        p.status === "ALIVE" ||
+        (p.witheredAt !== null && witherExpiry(p.witheredAt, 0) > now),
+    );
+    const plant = planFor(session, input.outcome, input.endedAt, occupied);
+    if (plant) {
+      await tx.grovePlant.createMany({ data: [{ ...plant, userId }], skipDuplicates: true });
+    }
+
+    if (!logTime) return;
 
     for (const seg of input.segments) {
       const task = await tx.task.findFirst({ where: { id: seg.taskId, userId } });

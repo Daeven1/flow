@@ -20,6 +20,9 @@ export async function POST(req: Request) {
       plannedMinutes: input.plannedMinutes,
       rule: input.rule,
       taskIds: JSON.stringify(input.taskIds),
+      plantSpecies: input.plant?.species ?? null,
+      plantX: input.plant?.x ?? null,
+      plantY: input.plant?.y ?? null,
     },
   });
 
