@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { parsePending, parseSaved } from "./storage";
+import { parsePending, parseSaved, shouldRetry } from "./storage";
 import type { SavedSession } from "./session";
 
 const valid: SavedSession = {
@@ -41,3 +41,8 @@ test("parsePending handles null and malformed input", () => {
 test("parsePending keeps only the valid entries", () => {
   expect(parsePending(JSON.stringify([valid, { startedAt: "x" }]))).toEqual([valid]);
 });
+
+test.each([[401, true], [429, true], [500, true], [503, true], [400, false], [404, false], [409, false]])(
+  "shouldRetry(%i) is %s",
+  (status, want) => expect(shouldRetry(status)).toBe(want),
+);

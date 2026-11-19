@@ -86,3 +86,8 @@ function validate(v: unknown): SavedSession | null {
     ended,
   };
 }
+
+/** Should a failed server call be tried again later? Most 4xx never will succeed. */
+export function shouldRetry(status: number): boolean {
+  return status === 401 || status === 429 || status >= 500;
+}

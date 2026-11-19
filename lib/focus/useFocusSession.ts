@@ -8,7 +8,7 @@ import {
   type PlannedMinutes,
   type SavedSession,
 } from "./session";
-import { PENDING_KEY, STORAGE_KEY, parsePending, parseSaved } from "./storage";
+import { PENDING_KEY, STORAGE_KEY, parsePending, parseSaved, shouldRetry } from "./storage";
 
 export type FocusSessionApi = {
   ready: boolean; // false until localStorage has been read
@@ -38,6 +38,10 @@ function readPending(): SavedSession[] {
   } catch {
     return [];
   }
+}
+
+function addPending(s: SavedSession) {
+  writePending([...readPending().filter((e) => e.startedAt !== s.startedAt), s]);
 }
 
 function writePending(list: SavedSession[]) {
@@ -72,7 +76,7 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
           taskIds: s.taskIds,
         }),
       });
-      if (res.status >= 400 && res.status < 500) {
+      if (res.status >= 400 && res.status < 500 && !shouldRetry(res.status)) {
         return { id, startRejected: true, endDone: !!s.ended };
       }
       if (!res.ok) return { id, startRejected: false, endDone: false };
@@ -117,6 +121,8 @@ export function useFocusSession(): FocusSessionApi {
   const ref = useRef<SavedSession | null>(null);
   const syncing = useRef(false);
   const flushing = useRef(false);
+  const syncDirty = useRef(false);
+  const flushWanted = useRef(false); // a flush was held back while a sync was in flight
   const rejectedStart = useRef<number | null>(null); // startedAt of a session whose start got a 4xx
 
   const commit = useCallback((next: SavedSession | null) => {
@@ -135,31 +141,6 @@ export function useFocusSession(): FocusSessionApi {
     },
     [commit],
   );
-
-  // Server sync for the current session. Never awaited by the UI.
-  const sync = useCallback(async () => {
-    const s = ref.current;
-    if (!s || syncing.current) return;
-    if (s.ended?.synced) return;
-    syncing.current = true;
-    try {
-      const skipStart = rejectedStart.current === s.startedAt;
-      const r = await push(s, skipStart);
-      if (r.startRejected) rejectedStart.current = s.startedAt;
-      patch(s.startedAt, (c) => {
-        let next = c;
-        if (r.id !== null && c.id !== r.id) next = { ...next, id: r.id };
-        // the end may have happened while the request was in flight: only trust it
-        // if what we sent was the same end
-        if (r.endDone && s.ended && next.ended && !next.ended.synced && next.ended.at === s.ended.at) {
-          next = { ...next, ended: { ...next.ended, synced: true } };
-        }
-        return next;
-      });
-    } finally {
-      syncing.current = false;
-    }
-  }, [patch]);
 
   // Ended sessions that were cleared before they reached the server.
   const flushPending = useCallback(async () => {
@@ -182,6 +163,52 @@ export function useFocusSession(): FocusSessionApi {
       flushing.current = false;
     }
   }, []);
+
+  // Server sync for the current session. Never awaited by the UI.
+  const sync = useCallback(async () => {
+    if (syncing.current) {
+      syncDirty.current = true; // something changed mid-flight: go round once more
+      return;
+    }
+    const s = ref.current;
+    if (!s) return;
+    if (s.ended?.synced) return;
+    syncing.current = true;
+    try {
+      const skipStart = rejectedStart.current === s.startedAt;
+      const r = await push(s, skipStart);
+      if (r.startRejected) rejectedStart.current = s.startedAt;
+
+      if (ref.current?.startedAt !== s.startedAt) {
+        // the session was moved to the pending list while we were talking to the
+        // server: keep what we learned (the id), or drop the entry if it is done
+        const rest = readPending().filter((e) => e.startedAt !== s.startedAt);
+        const entry = readPending().find((e) => e.startedAt === s.startedAt);
+        if (entry && !r.endDone) rest.push(r.id !== null ? { ...entry, id: r.id } : entry);
+        writePending(rest);
+        return;
+      }
+      patch(s.startedAt, (c) => {
+        let next = c;
+        if (r.id !== null && c.id !== r.id) next = { ...next, id: r.id };
+        // the end may have happened while the request was in flight: only trust it
+        // if what we sent was the same end
+        if (r.endDone && s.ended && next.ended && !next.ended.synced && next.ended.at === s.ended.at) {
+          next = { ...next, ended: { ...next.ended, synced: true } };
+        }
+        return next;
+      });
+    } finally {
+      syncing.current = false;
+      if (syncDirty.current) {
+        syncDirty.current = false;
+        void sync();
+      } else if (flushWanted.current) {
+        flushWanted.current = false;
+        void flushPending();
+      }
+    }
+  }, [patch, flushPending]);
 
   const syncAll = useCallback(() => {
     void sync();
@@ -322,6 +349,12 @@ export function useFocusSession(): FocusSessionApi {
       const cur = ref.current;
       if (cur && !cur.ended) return;
       if (taskIds.length === 0) return;
+      if (cur?.ended && !cur.ended.synced) {
+        // never overwrite an unsent end: park it in the pending list
+        addPending(cur);
+        if (syncing.current) flushWanted.current = true;
+        else void flushPending();
+      }
       const t = Date.now();
       setNow(t);
       commit({
@@ -335,7 +368,7 @@ export function useFocusSession(): FocusSessionApi {
         ended: null,
       });
     },
-    [commit],
+    [commit, flushPending],
   );
 
   const tick = useCallback<FocusSessionApi["tick"]>(
@@ -375,10 +408,12 @@ export function useFocusSession(): FocusSessionApi {
     if (!s || !s.ended) return;
     if (!s.ended.synced) {
       // keep the unsent end so it still reaches the server
-      writePending([...readPending().filter((e) => e.startedAt !== s.startedAt), s]);
+      addPending(s);
     }
     commit(null);
-    void flushPending();
+    // a sync in flight may still be creating this session's server id: let it finish first
+    if (syncing.current) flushWanted.current = true;
+    else void flushPending();
   }, [commit, flushPending]);
 
   return { ready, session, now, wakeLockOk, start, tick, giveUp, clear };
