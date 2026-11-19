@@ -1,0 +1,26 @@
+import type { Outcome } from "@/lib/focus/session";
+
+/**
+ * Moves `current` toward `target`, halving the remaining gap every
+ * `halfLifeMs`. Snaps to the target when the gap is tiny, or when `dtMs` is
+ * over 2 s (a tab coming back from hidden must not replay a long animation).
+ */
+export function approach(current: number, target: number, dtMs: number, halfLifeMs: number): number {
+  if (dtMs > 2000 || halfLifeMs <= 0) return target;
+  const next = target + (current - target) * Math.pow(0.5, Math.max(0, dtMs) / halfLifeMs);
+  return Math.abs(target - next) < 0.001 ? target : next;
+}
+
+/** What the growing plant should show for its progress and outcome. */
+export function shownGrowth(growing: { progress: number; outcome: Outcome | null }): { growth: number; withered: number } {
+  switch (growing.outcome) {
+    case "COMPLETED":
+    case "CLEARED":
+      return { growth: 1, withered: 0 };
+    case "GAVE_UP":
+    case "LEFT":
+      return { growth: growing.progress, withered: 1 };
+    default:
+      return { growth: growing.progress, withered: 0 };
+  }
+}

@@ -254,7 +254,8 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
     knee.add(bloomHolder);
     const bloom = new THREE.Group();
     bloomHolder.add(bloom);
-    const petals = new THREE.Mesh(petalGeo, bloomMats[Math.floor(rand() * bloomMats.length)]);
+    // Cycle through the chosen colours so every clump really shows all of them.
+    const petals = new THREE.Mesh(petalGeo, bloomMats[i % bloomMats.length]);
     const centre = new THREE.Mesh(centreGeo, centreMat);
     centre.scale.set(0.28, 0.2, 0.28);
     centre.position.y = 0.08;

@@ -32,10 +32,12 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   // /api/jarvis/ routes authenticate with JARVIS_TOKEN themselves (no session).
+  // /grove-lab is a dev-only playground (the page itself 404s in production).
   const isPublicPath =
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth") ||
-    pathname.startsWith("/api/jarvis/");
+    pathname.startsWith("/api/jarvis/") ||
+    (process.env.NODE_ENV !== "production" && pathname === "/grove-lab");
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
