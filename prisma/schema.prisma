@@ -182,3 +182,17 @@ model ReadItem {
 
   @@index([userId])
 }
+
+model FocusSession {
+  id             String    @id @default(cuid())
+  userId         String
+  startedAt      DateTime
+  plannedMinutes Int
+  rule           String
+  taskIds        String    // JSON string[] in queue order
+  outcome        String?   // null while running
+  endedAt        DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
+}
