@@ -12,6 +12,9 @@ test("what the growing plant shows", () => {
   expect(shownGrowth({ progress: 0.4, outcome: null })).toEqual({ growth: 0.4, withered: 0 });
   expect(shownGrowth({ progress: 0.4, outcome: "CLEARED" })).toEqual({ growth: 1, withered: 0 });
   expect(shownGrowth({ progress: 1, outcome: "COMPLETED" })).toEqual({ growth: 1, withered: 0 });
-  expect(shownGrowth({ progress: 0.4, outcome: "LEFT" })).toEqual({ growth: 0.4, withered: 1 });
-  expect(shownGrowth({ progress: 0.4, outcome: "GAVE_UP" })).toEqual({ growth: 0.4, withered: 1 });
+  expect(shownGrowth({ progress: 0.4, outcome: "LEFT" })).toEqual({ growth: 0.35, withered: 1 });
+  expect(shownGrowth({ progress: 0.4, outcome: "GAVE_UP" })).toEqual({ growth: 0.35, withered: 1 });
+  // a lost plant never grows while it withers: min(progress, 0.35)
+  expect(shownGrowth({ progress: 0.2, outcome: "GAVE_UP" })).toEqual({ growth: 0.2, withered: 1 });
+  expect(shownGrowth({ progress: 1, outcome: "LEFT" })).toEqual({ growth: 0.35, withered: 1 });
 });

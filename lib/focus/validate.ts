@@ -1,5 +1,5 @@
 import { LENGTHS } from "./session";
-import { parsePlantChoice } from "@/lib/grove/layout";
+import { parsePlantChoice, parseTz } from "@/lib/grove/layout";
 import type { PlantChoice } from "@/lib/grove/layout";
 import type { FocusRule, Outcome, PlannedMinutes, Segment } from "./session";
 
@@ -10,7 +10,8 @@ export type StartInput = {
   taskIds: string[];
   plant: PlantChoice | null;
 };
-export type EndInput = { outcome: Outcome; endedAt: Date; segments: Segment[] };
+// tz: the browser's getTimezoneOffset() at send time (0 when the body has none).
+export type EndInput = { outcome: Outcome; endedAt: Date; segments: Segment[]; tz: number };
 
 const RULES: FocusRule[] = ["STRICT", "GENTLE"];
 const OUTCOMES: Outcome[] = ["COMPLETED", "CLEARED", "GAVE_UP", "LEFT"];
@@ -63,5 +64,5 @@ export function parseEnd(body: unknown, plannedMinutes: number): EndInput | null
     segments[i] = { ...segments[i], minutes: segments[i].minutes - cut };
     over -= cut;
   }
-  return { outcome, endedAt, segments };
+  return { outcome, endedAt, segments, tz: parseTz(body.tz) };
 }

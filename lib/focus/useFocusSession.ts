@@ -16,6 +16,7 @@ export type FocusSessionApi = {
   session: SavedSession | null;
   now: number; // ticks about once a second while running
   wakeLockOk: boolean | null; // null = not requested; false = unsupported or refused
+  endsSynced: number; // goes up each time an end reaches the server (this session's or a pending one)
   start(input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[]; plant: PlantChoice | null }): void;
   tick(taskId: string): void; // records the tick; ends as CLEARED if it was the last
   giveUp(): void; // ends as GAVE_UP
@@ -58,6 +59,7 @@ type PushResult = {
   id: string | null; // the server id, if we have one now
   startRejected: boolean; // the start POST got a 4xx and can never succeed
   endDone: boolean; // the end no longer needs sending (sent, or can never succeed)
+  endSaved: boolean; // the end PATCH succeeded just now
 };
 
 // One server round for a session: start first if it has no id, then the end.
@@ -66,7 +68,7 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
   let id = s.id;
   try {
     if (id === null) {
-      if (skipStart) return { id, startRejected: true, endDone: !!s.ended };
+      if (skipStart) return { id, startRejected: true, endDone: !!s.ended, endSaved: false };
       const res = await fetch("/api/focus/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -79,15 +81,15 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
         }),
       });
       if (res.status >= 400 && res.status < 500 && !shouldRetry(res.status)) {
-        return { id, startRejected: true, endDone: !!s.ended };
+        return { id, startRejected: true, endDone: !!s.ended, endSaved: false };
       }
-      if (!res.ok) return { id, startRejected: false, endDone: false };
+      if (!res.ok) return { id, startRejected: false, endDone: false, endSaved: false };
       const body = (await res.json()) as { id?: unknown };
-      if (typeof body.id !== "string") return { id, startRejected: false, endDone: false };
+      if (typeof body.id !== "string") return { id, startRejected: false, endDone: false, endSaved: false };
       id = body.id;
     }
     const ended = s.ended;
-    if (!ended) return { id, startRejected: false, endDone: false };
+    if (!ended) return { id, startRejected: false, endDone: false, endSaved: false };
     const res = await fetch(`/api/focus/sessions/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -95,13 +97,14 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
         outcome: ended.outcome,
         endedAt: new Date(ended.at).toISOString(),
         segments: segments(s, ended.at),
+        tz: new Date().getTimezoneOffset(), // for the withered-plant cutoff
       }),
     });
     // 400/404 can never succeed, so stop retrying; 5xx may recover later.
     const done = res.ok || res.status === 400 || res.status === 404;
-    return { id, startRejected: false, endDone: done };
+    return { id, startRejected: false, endDone: done, endSaved: res.ok };
   } catch {
-    return { id, startRejected: false, endDone: false };
+    return { id, startRejected: false, endDone: false, endSaved: false };
   }
 }
 
@@ -118,6 +121,7 @@ export function useFocusSession(): FocusSessionApi {
   const [session, setSession] = useState<SavedSession | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [wakeLockOk, setWakeLockOk] = useState<boolean | null>(null);
+  const [endsSynced, setEndsSynced] = useState(0);
 
   // The ref is the latest truth, so event handlers never see stale state.
   const ref = useRef<SavedSession | null>(null);
@@ -152,8 +156,10 @@ export function useFocusSession(): FocusSessionApi {
     flushing.current = true;
     try {
       const keep: SavedSession[] = [];
+      let saved = 0;
       for (const entry of list) {
         const r = await push(entry, false);
+        if (r.endSaved) saved++;
         if (r.endDone) continue; // sent, or can never succeed (including a rejected start)
         keep.push(r.id !== entry.id ? { ...entry, id: r.id } : entry);
       }
@@ -161,6 +167,7 @@ export function useFocusSession(): FocusSessionApi {
       const done = new Set(list.map((e) => e.startedAt));
       const added = readPending().filter((e) => !done.has(e.startedAt));
       writePending([...keep, ...added]);
+      if (saved > 0) setEndsSynced((c) => c + saved);
     } finally {
       flushing.current = false;
     }
@@ -180,6 +187,7 @@ export function useFocusSession(): FocusSessionApi {
       const skipStart = rejectedStart.current === s.startedAt;
       const r = await push(s, skipStart);
       if (r.startRejected) rejectedStart.current = s.startedAt;
+      if (r.endSaved) setEndsSynced((c) => c + 1);
 
       if (ref.current?.startedAt !== s.startedAt) {
         // the session was moved to the pending list while we were talking to the
@@ -421,5 +429,5 @@ export function useFocusSession(): FocusSessionApi {
     else void flushPending();
   }, [commit, flushPending]);
 
-  return { ready, session, now, wakeLockOk, start, tick, giveUp, clear };
+  return { ready, session, now, wakeLockOk, endsSynced, start, tick, giveUp, clear };
 }

@@ -45,7 +45,7 @@ export async function PATCH(
     const occupied = existing.filter(
       (p) =>
         p.status === "ALIVE" ||
-        (p.witheredAt !== null && witherExpiry(p.witheredAt, 0) > now),
+        (p.witheredAt !== null && witherExpiry(p.witheredAt, input.tz) > now),
     );
     const plant = planFor(session, input.outcome, input.endedAt, occupied);
     if (plant) {

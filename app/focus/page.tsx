@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useModeContext } from "@/components/ModeProvider";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { GripVertical } from "lucide-react";
@@ -12,6 +12,7 @@ import { SessionView, type PileTask } from "@/components/focus/SessionView";
 import { SessionEnd } from "@/components/focus/SessionEnd";
 import { useFocusSession } from "@/lib/focus/useFocusSession";
 import { useGrove } from "@/lib/grove/useGrove";
+import { hasLanded, withPendingPlant, type PendingPlant } from "@/lib/grove/pending";
 import { Grove } from "@/components/grove/Grove";
 import { plantCount } from "@/components/focus/groveText";
 
@@ -36,6 +37,25 @@ export default function FocusPage() {
   const focus = useFocusSession();
   const grove = useGrove();
   const setupRef = useRef<HTMLDivElement>(null);
+  // Plants of ended sessions that the grove may not have yet, shown until a refresh does.
+  const [pendingPlants, setPendingPlants] = useState<PendingPlant[]>([]);
+  const plants = useMemo(
+    () => pendingPlants.reduce(withPendingPlant, grove.plants),
+    [pendingPlants, grove.plants],
+  );
+
+  useEffect(() => {
+    setPendingPlants((prev) => {
+      const next = prev.filter((pp) => !hasLanded(grove.plants, pp));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [grove.plants]);
+
+  // An end reached the server (perhaps after "New session"): load the grove again.
+  const { refresh: refreshGrove } = grove;
+  useEffect(() => {
+    if (focus.endsSynced > 0) refreshGrove();
+  }, [focus.endsSynced, refreshGrove]);
 
   const fetchList = useCallback(async (url: string): Promise<Task[]> => {
     const res = await fetch(url);
@@ -123,6 +143,13 @@ export default function FocusPage() {
     const leftover = (prev?.taskIds ?? []).filter(
       (id) => !ticked.has(id) && modeTasks.some((t) => t.id === id && !t.done),
     );
+    if (prev?.ended && prev.plant) {
+      const { plant, ended, startedAt } = prev;
+      setPendingPlants((list) => [
+        ...list.filter((pp) => pp.startedAt !== startedAt),
+        { species: plant.species, x: plant.x, y: plant.y, outcome: ended.outcome, startedAt, endedAt: ended.at },
+      ]);
+    }
     focus.clear();
     setQueue(leftover);
     setChoosing(false);
@@ -140,7 +167,7 @@ export default function FocusPage() {
   }
 
   const running = focus.session !== null && !focus.session.ended;
-  const groveCount = grove.plants.length;
+  const groveCount = plants.length;
 
   const queuedTasks = queue
     .map((id) => tasks.find((t) => t.id === id))
@@ -180,19 +207,20 @@ export default function FocusPage() {
                 name: names === "loaded" ? "A task that's no longer on your list" : "Task",
               },
           )}
-          plants={grove.plants}
+          plants={plants}
+          groveStatus={grove.status}
           onComplete={handleTick}
           onGiveUp={focus.giveUp}
         />
       ) : focus.session?.ended ? (
-        <SessionEnd session={focus.session} plants={grove.plants} onNew={handleNewSession} />
+        <SessionEnd session={focus.session} plants={plants} onNew={handleNewSession} />
       ) : (
         <div className="space-y-6">
         {/* The grove at rest. Hidden while choosing a session: the setup shows its own, pickable. */}
         {!choosing && grove.status !== "failed" && (
           <div className="flex flex-col items-center gap-1">
             <Grove
-              plants={grove.plants}
+              plants={plants}
               label={groveCount === 0 ? "Your grove: empty" : `Your grove: ${plantCount(groveCount)}`}
               className="w-full h-[280px]"
               fallback={null}
@@ -326,7 +354,7 @@ export default function FocusPage() {
               <div ref={setupRef} className="space-y-4 scroll-mt-4">
                 <SessionSetup
                   taskIds={queue}
-                  plants={grove.plants}
+                  plants={plants}
                   groveStatus={grove.status}
                   onStart={focus.start}
                 />

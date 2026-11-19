@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { StickyPile } from "@/components/StickyPile";
 import { Grove, type Growing } from "@/components/grove/Grove";
 import type { GrovePlant } from "@/lib/grove/layout";
+import type { GroveStatus } from "@/lib/grove/useGrove";
 import { NO_WEBGL_LINE, OnFallback, plantCount, speciesName } from "@/components/focus/groveText";
 import {
   formatClock,
@@ -47,6 +48,7 @@ type Props = {
   wakeLockOk: boolean | null;
   tasks: PileTask[]; // every task in the session, in queue order
   plants: GrovePlant[]; // the grove as it stands, without this session's plant
+  groveStatus: GroveStatus;
   onComplete: (taskId: string) => void; // ticks one task off
   onGiveUp: () => void;
 };
@@ -54,7 +56,7 @@ type Props = {
 const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:focus-visible:outline-blue-400";
 
-export function SessionView({ session, now, wakeLockOk, tasks, plants, onComplete, onGiveUp }: Props) {
+export function SessionView({ session, now, wakeLockOk, tasks, plants, groveStatus, onComplete, onGiveUp }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [noWebGL, setNoWebGL] = useState(false);
   const onNoWebGL = useCallback(() => setNoWebGL(true), []);
@@ -99,7 +101,7 @@ export function SessionView({ session, now, wakeLockOk, tasks, plants, onComplet
             growing={growing}
             label={`Your ${speciesName(growing.species, true)} ${
               growing.species === "FERN" ? "is" : "are"
-            } growing. ${plantCount(plants.length)} in your grove`}
+            } growing.${groveStatus === "failed" ? "" : ` ${plantCount(plants.length)} in your grove`}`}
             className={`w-full ${wakeWarning ? "h-[30svh]" : "h-[38svh]"} min-h-[180px] lg:h-[min(calc(100svh_-_240px),560px)] lg:min-h-[320px]`}
             fallback={
               <>
@@ -110,6 +112,11 @@ export function SessionView({ session, now, wakeLockOk, tasks, plants, onComplet
           />
         ) : (
           bar
+        )}
+        {growing && !noWebGL && groveStatus === "failed" && (
+          <p className="text-sm text-slate-600 dark:text-zinc-400 text-center">
+            Your grove couldn&apos;t load just now. Your plants are safe.
+          </p>
         )}
         <div
           aria-live="off"

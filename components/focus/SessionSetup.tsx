@@ -62,9 +62,16 @@ export function SessionSetup({ taskIds, plants, groveStatus, onStart }: Props) {
     return defaultSpot(n, plants);
   }, [picked, n, plants]);
 
-  // Only plant into a grove we could see; a session can always start without one.
+  // A session can always start. Still loading: plant on the default spot of an
+  // empty grove (the server moves a taken spot to the nearest free one).
+  // Only a grove that failed to load plants nothing.
+  const loadingSpot = defaultSpot(gridSize(1), []);
   const plant: PlantChoice | null =
-    groveStatus === "loaded" && spot ? { species, x: spot.x, y: spot.y } : null;
+    groveStatus === "failed"
+      ? null
+      : groveStatus === "loading"
+        ? loadingSpot && { species, x: loadingSpot.x, y: loadingSpot.y }
+        : spot && { species, x: spot.x, y: spot.y };
 
   // Reads the device, so it runs after mount rather than during render.
   useEffect(() => {

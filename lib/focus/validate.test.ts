@@ -46,3 +46,13 @@ test("parseEnd trims overflow across several segments, never below 0", () => {
     segments: [{ taskId: "a", minutes: 25 }, { taskId: "b", minutes: 10 }, { taskId: "c", minutes: 10 }] }, 25);
   expect(out?.segments).toEqual([{ taskId: "a", minutes: 25 }, { taskId: "b", minutes: 0 }, { taskId: "c", minutes: 0 }]);
 });
+test("parseEnd reads tz like GET /api/grove and accepts a body without it", () => {
+  const body = { outcome: "COMPLETED", endedAt: "2026-11-19T02:25:00.000Z", segments: [] };
+  expect(parseEnd(body, 25)?.tz).toBe(0);
+  expect(parseEnd({ ...body, tz: -480 }, 25)?.tz).toBe(-480);
+  expect(parseEnd({ ...body, tz: 300 }, 25)?.tz).toBe(300);
+  expect(parseEnd({ ...body, tz: "nope" }, 25)?.tz).toBe(0);
+  expect(parseEnd({ ...body, tz: null }, 25)?.tz).toBe(0);
+  expect(parseEnd({ ...body, tz: 5000 }, 25)?.tz).toBe(840);
+  expect(parseEnd({ ...body, tz: -5000 }, 25)?.tz).toBe(-840);
+});

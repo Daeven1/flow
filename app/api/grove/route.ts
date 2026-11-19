@@ -3,15 +3,14 @@ export const runtime = 'nodejs';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
-import { isSpecies, witherExpiry } from "@/lib/grove/layout";
+import { isSpecies, parseTz, witherExpiry } from "@/lib/grove/layout";
 import type { GrovePlant, PlantStatus } from "@/lib/grove/layout";
 
 export async function GET(req: Request) {
   const userId = await getUser();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const raw = Number.parseInt(new URL(req.url).searchParams.get("tz") ?? "", 10);
-  const tz = Number.isNaN(raw) ? 0 : Math.min(840, Math.max(-840, raw));
+  const tz = parseTz(new URL(req.url).searchParams.get("tz"));
 
   const now = new Date();
   const withered = await prisma.grovePlant.findMany({

@@ -77,6 +77,12 @@ export function witherExpiry(witheredAt: Date, tzOffsetMin: number): Date {
   return new Date(localMidnight + tzOffsetMin * 60_000);
 }
 
+/** A getTimezoneOffset() value from a request: an integer in minutes, clamped to ±840; 0 when absent or not a number. */
+export function parseTz(v: unknown): number {
+  const raw = Number.parseInt(String(v ?? ""), 10);
+  return Number.isNaN(raw) ? 0 : Math.min(840, Math.max(-840, raw));
+}
+
 export function parsePlantChoice(v: unknown): PlantChoice | null {
   if (typeof v !== "object" || v === null) return null;
   const { species, x, y } = v as Record<string, unknown>;

@@ -12,7 +12,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { SPECIES, freeSpots, gridSize, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
 import { buildIsland, buildPlant, fullHeight, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
-import { approach, shownGrowth } from "@/lib/grove/tween";
+import { WITHERED_GROWTH, approach, shownGrowth } from "@/lib/grove/tween";
 import type { Outcome } from "@/lib/focus/session";
 
 export type Growing = { species: Species; spot: Spot; progress: number; outcome: Outcome | null };
@@ -45,6 +45,8 @@ const GROWTH_HALF_LIFE = 600; // ms
 const DROOP_MS = 1500;
 const BOUNCE_MS = 400;
 const BOUNCE_SCALE = 0.08;
+// A kept plant bounces once it has (nearly) finished growing to full size.
+const BOUNCE_WHEN_WITHIN = 0.05;
 const SWAY_AMPLITUDE = 0.035; // radians, about 2 degrees
 const YAW_HALF_LIFE = 120; // ms, for arrow-key turns
 const KEY_TURN = Math.PI / 12; // 15 degrees per arrow press
@@ -115,6 +117,7 @@ type GrowingEntry = {
   wither: number; // 0..1 linear, shown eased
   witherTarget: number;
   bounceAt: number | null; // performance.now() when a bounce started
+  bouncePending: boolean; // bounce once the growth reaches its target
 };
 
 /**
@@ -429,7 +432,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
         // Same key as the growing plant, so a saved plant keeps the look it grew with.
         const seed = hash(`${p.species}:${p.x},${p.y}`);
         const model = buildPlant(p.species, seed, theme);
-        model.setGrowth(1);
+        model.setGrowth(p.status === "WITHERED" ? WITHERED_GROWTH : 1);
         model.setWithered(p.status === "WITHERED" ? 1 : 0);
         const holder = holderAt(p, model);
         kept.set(p.id, {
@@ -438,6 +441,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
         });
       } else if (cur.status !== p.status) {
         cur.status = p.status;
+        cur.model.setGrowth(p.status === "WITHERED" ? WITHERED_GROWTH : 1);
         cur.model.setWithered(p.status === "WITHERED" ? 1 : 0);
         cur.sway.amount = p.status === "WITHERED" ? 0.4 : 1;
       }
@@ -457,22 +461,27 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
       const shown = shownGrowth(g);
       if (!growing || growing.key !== key) {
         // A new plant appears in its current state, without animating in.
+        // One created with an outcome already set (the end screen replaces the
+        // session screen) starts from the session's state and plays the end:
+        // a kept plant grows the rest of the way and bounces, a lost one droops.
         disposeGrowing();
         const seed = hash(key);
         const model = buildPlant(g.species, seed, theme);
         const holder = holderAt(g.spot, model);
+        const ending = g.outcome !== null && !reduced;
         growing = {
           key, spot: { ...g.spot }, species: g.species, model,
           sway: { holder, ...swayFor(seed, false) },
           progress: g.progress, outcome: g.outcome,
-          growth: shown.growth, growthTarget: shown.growth,
-          wither: shown.withered, witherTarget: shown.withered,
+          growth: ending ? g.progress : shown.growth, growthTarget: shown.growth,
+          wither: ending ? 0 : shown.withered, witherTarget: shown.withered,
           bounceAt: null,
+          bouncePending: ending && isKept(g.outcome),
         };
         applyGrowing();
       } else {
         if (g.outcome !== growing.outcome) {
-          if (isKept(g.outcome) && !reduced) growing.bounceAt = performance.now();
+          if (isKept(g.outcome) && !reduced) growing.bouncePending = true;
           growing.outcome = g.outcome;
         }
         growing.progress = g.progress;
@@ -606,6 +615,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
     if (Math.abs(yaw - yawTarget) > 1e-4) return true;
     if (growing) {
       if (growing.growth !== growing.growthTarget || growing.wither !== growing.witherTarget) return true;
+      if (growing.bouncePending) return true;
       if (growing.bounceAt !== null && now - growing.bounceAt < BOUNCE_MS) return true;
     }
     return false;
@@ -629,6 +639,14 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
           : Math.max(gr.witherTarget, gr.wither - step);
       }
       applyGrowing();
+      if (gr.bouncePending) {
+        // No bounce under reduced motion or after a long pause (it snapped).
+        if (snap) gr.bouncePending = false;
+        else if (Math.abs(gr.growthTarget - gr.growth) <= BOUNCE_WHEN_WITHIN) {
+          gr.bouncePending = false;
+          gr.bounceAt = now;
+        }
+      }
       let scale = 1;
       if (gr.bounceAt !== null) {
         const t = (now - gr.bounceAt) / BOUNCE_MS;
@@ -725,6 +743,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
       growing.growth = growing.growthTarget;
       growing.wither = growing.witherTarget;
       growing.bounceAt = null;
+      growing.bouncePending = false;
     }
     invalidate();
   };

@@ -56,6 +56,8 @@ export default function GroveLab() {
   const [pickable, setPickable] = useState(false);
   const [picked, setPicked] = useState<Spot | null>(null);
   const [dark, setDark] = useState(false);
+  // Bumped to remount the grove, as the Focus page does when the end screen replaces the session.
+  const [mount, setMount] = useState(0);
 
   useEffect(() => setDark(document.documentElement.classList.contains("dark")), []);
   const toggleDark = () => {
@@ -92,6 +94,7 @@ export default function GroveLab() {
       </div>
 
       <Grove
+        key={mount}
         plants={plants}
         growing={growing}
         pickable={pickable}
@@ -148,6 +151,9 @@ export default function GroveLab() {
           </button>
           <button type="button" aria-pressed={dark} onClick={toggleDark} className={choiceClass(dark)}>
             Dark theme
+          </button>
+          <button type="button" onClick={() => setMount((m) => m + 1)} className={choiceClass(false)}>
+            Remount with outcome
           </button>
         </div>
         <p className="text-sm text-slate-600 dark:text-zinc-400 sm:col-span-2">

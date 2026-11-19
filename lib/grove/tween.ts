@@ -11,6 +11,9 @@ export function approach(current: number, target: number, dtMs: number, halfLife
   return Math.abs(target - next) < 0.001 ? target : next;
 }
 
+/** How grown a withered plant is drawn: the same small size on every screen. */
+export const WITHERED_GROWTH = 0.35;
+
 /** What the growing plant should show for its progress and outcome. */
 export function shownGrowth(growing: { progress: number; outcome: Outcome | null }): { growth: number; withered: number } {
   switch (growing.outcome) {
@@ -19,7 +22,7 @@ export function shownGrowth(growing: { progress: number; outcome: Outcome | null
       return { growth: 1, withered: 0 };
     case "GAVE_UP":
     case "LEFT":
-      return { growth: growing.progress, withered: 1 };
+      return { growth: Math.min(growing.progress, WITHERED_GROWTH), withered: 1 };
     default:
       return { growth: growing.progress, withered: 0 };
   }
