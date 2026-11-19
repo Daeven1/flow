@@ -8,7 +8,7 @@ import {
   type PlannedMinutes,
   type SavedSession,
 } from "./session";
-import { STORAGE_KEY, parseSaved } from "./storage";
+import { PENDING_KEY, STORAGE_KEY, parsePending, parseSaved } from "./storage";
 
 export type FocusSessionApi = {
   ready: boolean; // false until localStorage has been read
@@ -32,6 +32,73 @@ function save(s: SavedSession | null) {
   }
 }
 
+function readPending(): SavedSession[] {
+  try {
+    return parsePending(localStorage.getItem(PENDING_KEY));
+  } catch {
+    return [];
+  }
+}
+
+function writePending(list: SavedSession[]) {
+  try {
+    if (list.length) localStorage.setItem(PENDING_KEY, JSON.stringify(list));
+    else localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // storage unavailable: nothing more we can do
+  }
+}
+
+type PushResult = {
+  id: string | null; // the server id, if we have one now
+  startRejected: boolean; // the start POST got a 4xx and can never succeed
+  endDone: boolean; // the end no longer needs sending (sent, or can never succeed)
+};
+
+// One server round for a session: start first if it has no id, then the end.
+// Never throws; network errors and 5xx leave things for a later retry.
+async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
+  let id = s.id;
+  try {
+    if (id === null) {
+      if (skipStart) return { id, startRejected: true, endDone: !!s.ended };
+      const res = await fetch("/api/focus/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startedAt: new Date(s.startedAt).toISOString(),
+          plannedMinutes: s.plannedMinutes,
+          rule: s.rule,
+          taskIds: s.taskIds,
+        }),
+      });
+      if (res.status >= 400 && res.status < 500) {
+        return { id, startRejected: true, endDone: !!s.ended };
+      }
+      if (!res.ok) return { id, startRejected: false, endDone: false };
+      const body = (await res.json()) as { id?: unknown };
+      if (typeof body.id !== "string") return { id, startRejected: false, endDone: false };
+      id = body.id;
+    }
+    const ended = s.ended;
+    if (!ended) return { id, startRejected: false, endDone: false };
+    const res = await fetch(`/api/focus/sessions/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        outcome: ended.outcome,
+        endedAt: new Date(ended.at).toISOString(),
+        segments: segments(s, ended.at),
+      }),
+    });
+    // 400/404 can never succeed, so stop retrying; 5xx may recover later.
+    const done = res.ok || res.status === 400 || res.status === 404;
+    return { id, startRejected: false, endDone: done };
+  } catch {
+    return { id, startRejected: false, endDone: false };
+  }
+}
+
 // Ends the session if judge says it is over. Same object back when nothing changes.
 function applyJudge(s: SavedSession, now: number): SavedSession {
   if (s.ended) return s;
@@ -49,6 +116,8 @@ export function useFocusSession(): FocusSessionApi {
   // The ref is the latest truth, so event handlers never see stale state.
   const ref = useRef<SavedSession | null>(null);
   const syncing = useRef(false);
+  const flushing = useRef(false);
+  const rejectedStart = useRef<number | null>(null); // startedAt of a session whose start got a 4xx
 
   const commit = useCallback((next: SavedSession | null) => {
     ref.current = next;
@@ -67,59 +136,57 @@ export function useFocusSession(): FocusSessionApi {
     [commit],
   );
 
-  // Server sync. Never awaited by the UI; failures just wait for the next retry.
+  // Server sync for the current session. Never awaited by the UI.
   const sync = useCallback(async () => {
     const s = ref.current;
     if (!s || syncing.current) return;
     if (s.ended?.synced) return;
     syncing.current = true;
     try {
-      let id = s.id;
-      if (id === null) {
-        const res = await fetch("/api/focus/sessions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            startedAt: new Date(s.startedAt).toISOString(),
-            plannedMinutes: s.plannedMinutes,
-            rule: s.rule,
-            taskIds: s.taskIds,
-          }),
-        });
-        if (!res.ok) return;
-        const body = (await res.json()) as { id?: unknown };
-        if (typeof body.id !== "string") return;
-        id = body.id;
-        const gotId = id;
-        patch(s.startedAt, (c) => (c.id === gotId ? c : { ...c, id: gotId }));
-      }
-
-      const latest = ref.current;
-      if (!latest || latest.startedAt !== s.startedAt) return;
-      const ended = latest.ended;
-      if (!ended || ended.synced) return;
-
-      const res = await fetch(`/api/focus/sessions/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          outcome: ended.outcome,
-          endedAt: new Date(ended.at).toISOString(),
-          segments: segments(latest, ended.at),
-        }),
+      const skipStart = rejectedStart.current === s.startedAt;
+      const r = await push(s, skipStart);
+      if (r.startRejected) rejectedStart.current = s.startedAt;
+      patch(s.startedAt, (c) => {
+        let next = c;
+        if (r.id !== null && c.id !== r.id) next = { ...next, id: r.id };
+        // the end may have happened while the request was in flight: only trust it
+        // if what we sent was the same end
+        if (r.endDone && s.ended && next.ended && !next.ended.synced && next.ended.at === s.ended.at) {
+          next = { ...next, ended: { ...next.ended, synced: true } };
+        }
+        return next;
       });
-      // 400/404 can never succeed, so stop retrying; 5xx may recover later.
-      if (res.ok || res.status === 400 || res.status === 404) {
-        patch(s.startedAt, (c) =>
-          c.ended && !c.ended.synced ? { ...c, ended: { ...c.ended, synced: true } } : c,
-        );
-      }
-    } catch {
-      // network error: leave synced false for a later retry
     } finally {
       syncing.current = false;
     }
   }, [patch]);
+
+  // Ended sessions that were cleared before they reached the server.
+  const flushPending = useCallback(async () => {
+    if (flushing.current) return;
+    const list = readPending();
+    if (list.length === 0) return;
+    flushing.current = true;
+    try {
+      const keep: SavedSession[] = [];
+      for (const entry of list) {
+        const r = await push(entry, false);
+        if (r.endDone) continue; // sent, or can never succeed (including a rejected start)
+        keep.push(r.id !== entry.id ? { ...entry, id: r.id } : entry);
+      }
+      // entries added by clear() while we were busy stay too
+      const done = new Set(list.map((e) => e.startedAt));
+      const added = readPending().filter((e) => !done.has(e.startedAt));
+      writePending([...keep, ...added]);
+    } finally {
+      flushing.current = false;
+    }
+  }, []);
+
+  const syncAll = useCallback(() => {
+    void sync();
+    void flushPending();
+  }, [sync, flushPending]);
 
   const running = !!session && !session.ended;
   const strictRunning = running && session?.rule === "STRICT";
@@ -148,8 +215,8 @@ export function useFocusSession(): FocusSessionApi {
     }
     setNow(t);
     setReady(true);
-    void sync();
-  }, [sync]);
+    syncAll();
+  }, [syncAll]);
 
   // Visibility, pagehide and online.
   useEffect(() => {
@@ -167,10 +234,10 @@ export function useFocusSession(): FocusSessionApi {
         if (next !== s) commit(next);
         setNow(t);
       }
-      void sync();
+      syncAll();
     };
     const onVisibility = () => (document.visibilityState === "hidden" ? onHidden() : onVisible());
-    const onOnline = () => void sync();
+    const onOnline = () => syncAll();
 
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onHidden);
@@ -182,7 +249,7 @@ export function useFocusSession(): FocusSessionApi {
       window.removeEventListener("pageshow", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [commit, sync]);
+  }, [commit, syncAll]);
 
   // While running: tick the clock about once a second and let judge decide.
   useEffect(() => {
@@ -306,8 +373,13 @@ export function useFocusSession(): FocusSessionApi {
   const clear = useCallback(() => {
     const s = ref.current;
     if (!s || !s.ended) return;
+    if (!s.ended.synced) {
+      // keep the unsent end so it still reaches the server
+      writePending([...readPending().filter((e) => e.startedAt !== s.startedAt), s]);
+    }
     commit(null);
-  }, [commit]);
+    void flushPending();
+  }, [commit, flushPending]);
 
   return { ready, session, now, wakeLockOk, start, tick, giveUp, clear };
 }

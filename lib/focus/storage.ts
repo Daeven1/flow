@@ -1,6 +1,7 @@
 import { LENGTHS, type SavedSession } from "./session";
 
 export const STORAGE_KEY = "grove-focus-session";
+export const PENDING_KEY = "grove-focus-pending";
 
 const OUTCOMES = ["COMPLETED", "CLEARED", "GAVE_UP", "LEFT"];
 const RULES = ["STRICT", "GENTLE"];
@@ -22,6 +23,28 @@ export function parseSaved(raw: string | null): SavedSession | null {
   } catch {
     return null;
   }
+  return validate(v);
+}
+
+/** The ended sessions still waiting to reach the server. Malformed entries are dropped. */
+export function parsePending(raw: string | null): SavedSession[] {
+  if (!raw) return [];
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(v)) return [];
+  const out: SavedSession[] = [];
+  for (const entry of v) {
+    const s = validate(entry);
+    if (s) out.push(s);
+  }
+  return out;
+}
+
+function validate(v: unknown): SavedSession | null {
   if (!isObj(v)) return null;
 
   if (!(v.id === null || typeof v.id === "string")) return null;

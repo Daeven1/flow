@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { parseSaved } from "./storage";
+import { parsePending, parseSaved } from "./storage";
 import type { SavedSession } from "./session";
 
 const valid: SavedSession = {
@@ -31,4 +31,13 @@ test("parseSaved round-trips a valid session", () => {
 test("parseSaved round-trips an ended session", () => {
   const ended = { ...valid, id: null, hiddenAt: 5, ended: { outcome: "LEFT" as const, at: 9, synced: false } };
   expect(parseSaved(JSON.stringify(ended))).toEqual(ended);
+});
+
+test("parsePending handles null and malformed input", () => {
+  expect(parsePending(null)).toEqual([]);
+  expect(parsePending("{")).toEqual([]);
+  expect(parsePending('{"a":1}')).toEqual([]);
+});
+test("parsePending keeps only the valid entries", () => {
+  expect(parsePending(JSON.stringify([valid, { startedAt: "x" }]))).toEqual([valid]);
 });
