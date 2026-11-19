@@ -341,7 +341,8 @@ function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spo
       }
       const cur = kept.get(p.id);
       if (!cur) {
-        const seed = hash(p.id);
+        // Same key as the growing plant, so a saved plant keeps the look it grew with.
+        const seed = hash(`${p.species}:${p.x},${p.y}`);
         const model = buildPlant(p.species, seed, theme);
         model.setGrowth(1);
         model.setWithered(p.status === "WITHERED" ? 1 : 0);
