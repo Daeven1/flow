@@ -1,0 +1,88 @@
+export const SPECIES = ["WILDFLOWERS", "FERN"] as const;
+export type Species = (typeof SPECIES)[number];
+export type PlantStatus = "ALIVE" | "WITHERED";
+export type Spot = { x: number; y: number };
+export type GrovePlant = {
+  id: string; species: Species; x: number; y: number;
+  status: PlantStatus; plantedAt: string; witheredAt: string | null; // ISO strings
+};
+export type PlantChoice = { species: Species; x: number; y: number };
+
+export function isSpecies(v: unknown): v is Species {
+  return typeof v === "string" && (SPECIES as readonly string[]).includes(v);
+}
+
+/** Smallest even n >= 6 with plantCount <= n*n - 6. */
+export function gridSize(plantCount: number): number {
+  let n = 6;
+  while (plantCount > n * n - 6) n += 2;
+  return n;
+}
+
+/** Every integer pair with x, y in [-n/2, n/2 - 1]. */
+export function spots(n: number): Spot[] {
+  const lo = -n / 2;
+  const hi = n / 2 - 1;
+  const out: Spot[] = [];
+  for (let y = lo; y <= hi; y++) {
+    for (let x = lo; x <= hi; x++) out.push({ x, y });
+  }
+  return out;
+}
+
+export function freeSpots(n: number, plants: Spot[]): Spot[] {
+  const taken = new Set(plants.map((p) => `${p.x},${p.y}`));
+  return spots(n).filter((s) => !taken.has(`${s.x},${s.y}`));
+}
+
+function closestTo(candidates: Spot[], target: Spot): Spot | null {
+  let best: Spot | null = null;
+  let bestD = Infinity;
+  for (const s of candidates) {
+    const d = (s.x - target.x) ** 2 + (s.y - target.y) ** 2;
+    if (
+      best === null ||
+      d < bestD ||
+      (d === bestD && (s.y < best.y || (s.y === best.y && s.x < best.x)))
+    ) {
+      best = s;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+export function defaultSpot(n: number, plants: Spot[]): Spot | null {
+  return closestTo(freeSpots(n, plants), { x: -0.5, y: -0.5 });
+}
+
+export function nearestFree(n: number, plants: Spot[], want: Spot): Spot | null {
+  const free = freeSpots(n, plants);
+  const exact = free.find((s) => s.x === want.x && s.y === want.y);
+  if (exact) return { x: exact.x, y: exact.y };
+  return closestTo(free, want);
+}
+
+/**
+ * The instant a withered plant disappears: local midnight at the start of the
+ * day after next. tzOffsetMin follows Date.prototype.getTimezoneOffset().
+ */
+export function witherExpiry(witheredAt: Date, tzOffsetMin: number): Date {
+  const local = new Date(witheredAt.getTime() - tzOffsetMin * 60_000);
+  const localMidnight = Date.UTC(
+    local.getUTCFullYear(),
+    local.getUTCMonth(),
+    local.getUTCDate() + 2,
+  );
+  return new Date(localMidnight + tzOffsetMin * 60_000);
+}
+
+export function parsePlantChoice(v: unknown): PlantChoice | null {
+  if (typeof v !== "object" || v === null) return null;
+  const { species, x, y } = v as Record<string, unknown>;
+  if (!isSpecies(species)) return null;
+  const ok = (c: unknown): c is number =>
+    typeof c === "number" && Number.isInteger(c) && c >= -20 && c <= 19;
+  if (!ok(x) || !ok(y)) return null;
+  return { species, x, y };
+}
