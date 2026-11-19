@@ -10,8 +10,8 @@
  */
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { freeSpots, gridSize, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
-import { buildIsland, buildPlant, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
+import { SPECIES, freeSpots, gridSize, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
+import { buildIsland, buildPlant, fullHeight, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
 import { approach, shownGrowth } from "@/lib/grove/tween";
 import type { Outcome } from "@/lib/focus/session";
 
@@ -30,9 +30,17 @@ export type GroveCanvasProps = {
 // ---------------------------------------------------------------------------
 // Tunables
 
-const ELEVATION = (38 * Math.PI) / 180; // camera angle above the horizon
+const ELEVATION = (35 * Math.PI) / 180; // camera angle above the horizon
 const FOV = 30; // vertical, degrees
-const FILL = 0.86; // the island may use this much of each half of the view
+// Framing: at its resting angle the island fills this much of the limiting
+// dimension; turned to its widest it may use up to MAX_FILL, never more.
+const FILL = 0.9;
+const MAX_FILL = 0.98;
+const START_YAW = -Math.PI / 10;
+// Tallest a plant can reach: the tallest species, its +6 % seeded size
+// variation, the kept-outcome bounce and a little sway.
+const PLANT_TOP = Math.max(...SPECIES.map(fullHeight)) * 1.06 * (1 + 0.08) + 0.03;
+const PLANT_REACH = 0.42; // how far a full plant spreads from its spot centre
 const GROWTH_HALF_LIFE = 600; // ms
 const DROOP_MS = 1500;
 const BOUNCE_MS = 400;
@@ -50,13 +58,19 @@ const LIGHTS: Record<Theme, { sky: number; ground: number; hemi: number; sun: nu
   light: { sky: 0xcfe4ff, ground: 0x9fbf6a, hemi: 2.1, sun: 2.0, sunColour: 0xfff3dc },
   dark: { sky: 0x8aa2d6, ground: 0x3f6248, hemi: 1.7, sun: 1.6, sunColour: 0xdfe8ff },
 };
-const DISC: Record<Theme, { colour: number; opacity: number; selected: number }> = {
-  light: { colour: 0xffffff, opacity: 0.38, selected: 0.75 },
-  dark: { colour: 0xd8f0dc, opacity: 0.2, selected: 0.5 },
+// Free spots: small, low-contrast rings a little lighter than the grass.
+const DISC: Record<Theme, { colour: number; opacity: number }> = {
+  light: { colour: 0xe4f7c8, opacity: 0.3 },
+  dark: { colour: 0xb9e6a0, opacity: 0.16 },
+};
+// The selected spot: a soft warm-yellow ring under the seedling.
+const SELECTED_RING: Record<Theme, { colour: number; opacity: number }> = {
+  light: { colour: 0xffd34d, opacity: 0.8 },
+  dark: { colour: 0xffcf4a, opacity: 0.65 },
 };
 const SPROUT: Record<Theme, { stem: number; leaf: number }> = {
-  light: { stem: 0x5f8f3e, leaf: 0x7cb84f },
-  dark: { stem: 0x4f9a35, leaf: 0x66c247 },
+  light: { stem: 0x5a8c38, leaf: 0x7cc04c },
+  dark: { stem: 0x55a33a, leaf: 0x74d052 },
 };
 
 // ---------------------------------------------------------------------------
@@ -103,36 +117,54 @@ type GrowingEntry = {
   bounceAt: number | null; // performance.now() when a bounce started
 };
 
-/** A tiny two-leaf seedling that marks the chosen spot. */
-function buildSprout(theme: Theme) {
-  const geometries: THREE.BufferGeometry[] = [];
-  const materials: THREE.Material[] = [];
-  const pal = SPROUT[theme];
+/**
+ * The selected-spot marker: a two-leaf seedling standing in a soft warm ring.
+ * Built once; `setTheme` only recolours it.
+ */
+function buildMarker() {
   const group = new THREE.Group();
-  const stemGeo = new THREE.CylinderGeometry(0.008, 0.012, 0.13, 4, 1, true);
-  stemGeo.translate(0, 0.065, 0);
+  const stemGeo = new THREE.CylinderGeometry(0.012, 0.018, 0.16, 5, 1, true);
+  stemGeo.translate(0, 0.08, 0);
+  // A broad creased seed leaf along +x.
   const leafGeo = new THREE.BufferGeometry();
   leafGeo.setAttribute("position", new THREE.Float32BufferAttribute([
-    0, 0, 0, 0.045, 0.02, -0.03, 0.1, 0.035, 0,
-    0, 0, 0, 0.1, 0.035, 0, 0.045, 0.02, 0.03,
+    0, 0, 0, 0.06, 0.03, -0.045, 0.065, 0.05, 0,
+    0.06, 0.03, -0.045, 0.13, 0.045, 0, 0.065, 0.05, 0,
+    0, 0, 0, 0.065, 0.05, 0, 0.06, 0.03, 0.045,
+    0.065, 0.05, 0, 0.13, 0.045, 0, 0.06, 0.03, 0.045,
   ], 3));
   leafGeo.computeVertexNormals();
-  geometries.push(stemGeo, leafGeo);
-  const stemMat = new THREE.MeshStandardMaterial({ color: pal.stem, flatShading: true, roughness: 0.9 });
-  const leafMat = new THREE.MeshStandardMaterial({ color: pal.leaf, flatShading: true, roughness: 0.9, side: THREE.DoubleSide });
-  materials.push(stemMat, leafMat);
-  group.add(new THREE.Mesh(stemGeo, stemMat));
+  const ringGeo = new THREE.RingGeometry(0.17, 0.27, 28);
+  ringGeo.rotateX(-Math.PI / 2);
+  const stemMat = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.85 });
+  const leafMat = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.85, side: THREE.DoubleSide });
+  const ringMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
+  const seedling = new THREE.Group();
+  seedling.scale.setScalar(1.7); // stands about 0.3 tall, readable at a glance
+  seedling.add(new THREE.Mesh(stemGeo, stemMat));
   for (const side of [0, Math.PI]) {
     const leaf = new THREE.Mesh(leafGeo, leafMat);
-    leaf.position.y = 0.12;
-    leaf.rotation.set(0, side + 0.4, 0.35);
-    group.add(leaf);
+    leaf.position.y = 0.15;
+    leaf.rotation.set(0, side + 0.5, 0.4);
+    seedling.add(leaf);
   }
+  group.add(seedling);
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.y = 0.008;
+  ring.renderOrder = 2;
+  group.add(ring);
+  group.visible = false;
   return {
     group,
+    setTheme(theme: Theme) {
+      stemMat.color.setHex(SPROUT[theme].stem);
+      leafMat.color.setHex(SPROUT[theme].leaf);
+      ringMat.color.setHex(SELECTED_RING[theme].colour);
+      ringMat.opacity = SELECTED_RING[theme].opacity;
+    },
     dispose() {
-      geometries.forEach((g) => g.dispose());
-      materials.forEach((m) => m.dispose());
+      [stemGeo, leafGeo, ringGeo].forEach((g) => g.dispose());
+      [stemMat, leafMat, ringMat].forEach((m) => m.dispose());
     },
   };
 }
@@ -145,6 +177,18 @@ type SyncInput = Pick<GroveCanvasProps, "plants" | "growing" | "pickable" | "sel
 function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spot) => void) {
   // Throws when WebGL is unavailable; the caller turns that into onFail.
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "low-power" });
+  try {
+    return engineWith(renderer, wrapper, onFail, pick);
+  } catch (err) {
+    // Don't leak the context or leave a dead canvas behind.
+    renderer.dispose();
+    renderer.forceContextLoss();
+    renderer.domElement.remove();
+    throw err;
+  }
+}
+
+function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spot) => void) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(0x000000, 0);
   const canvas = renderer.domElement;
@@ -176,15 +220,19 @@ function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spo
   let growing: GrowingEntry | null = null;
   let input: SyncInput = { plants: [] };
 
-  // Free-spot discs and the seedling marker.
-  const discGeo = new THREE.CircleGeometry(0.3, 20);
+  // Free-spot rings (one per spot of the current grid, built when the grid
+  // size changes, then only shown or hidden) and the selected-spot marker
+  // (built once, then only moved).
+  const discGeo = new THREE.RingGeometry(0.11, 0.175, 18);
   discGeo.rotateX(-Math.PI / 2);
   const discMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
-  const selectedMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
-  let sprout: ReturnType<typeof buildSprout> | null = null;
+  const discs = new Map<string, THREE.Mesh>();
+  let discsFor = 0; // grid size the discs were built for
+  const marker = buildMarker();
+  spotLayer.add(marker.group);
   let free = new Set<string>();
 
-  let yaw = -Math.PI / 10;
+  let yaw = START_YAW;
   let yawTarget = yaw;
 
   // --- theme ---------------------------------------------------------------
@@ -195,72 +243,106 @@ function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spo
     hemi.intensity = l.hemi;
     sun.color.setHex(l.sunColour);
     sun.intensity = l.sun;
-    const d = DISC[theme];
-    discMat.color.setHex(d.colour);
-    discMat.opacity = d.opacity;
-    selectedMat.color.setHex(d.colour);
-    selectedMat.opacity = d.selected;
+    discMat.color.setHex(DISC[theme].colour);
+    discMat.opacity = DISC[theme].opacity;
+    marker.setTheme(theme);
   }
 
   // --- framing -------------------------------------------------------------
-  // The island turns, so frame the cylinder that holds it at any angle: the
-  // corner radius of its rounded-square rim, its soil base, and the tops of
-  // the plants on the far side.
+  // Frames the real island (its vertices) and the tops of the tallest
+  // possible plants at the corners of the planting grid. Two fits, and the
+  // farther camera wins: the island at its resting angle fills FILL of the
+  // limiting dimension, and turned to its widest (a circle of its largest
+  // radius) it still fits within MAX_FILL. Framing ignores the current turn,
+  // so turning never zooms.
   let width = 1;
   let height = 1;
   const target = new THREE.Vector3();
   const tmp = new THREE.Vector3();
-  function frame() {
-    if (n === 0) return; // not synced yet
+  const rest = new THREE.Matrix4();
+  function framePoints() {
     const half = n / 2;
-    const rimR = half * Math.SQRT2 + 0.75;
-    const rings: [number, number][] = [
-      [rimR, -0.12], [half * Math.SQRT2 + 0.35, -0.55], [half * Math.SQRT2, 0.6],
-    ];
-    const pts: THREE.Vector3[] = [];
-    for (const [r, y] of rings) {
-      for (let i = 0; i < 32; i++) {
-        const a = (i / 32) * Math.PI * 2;
-        pts.push(new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r));
+    const resting: THREE.Vector3[] = [];
+    let maxR = 0;
+    let minY = 0;
+    rest.makeRotationY(START_YAW);
+    island?.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const pos = mesh.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i += 3) {
+        const v = new THREE.Vector3().fromBufferAttribute(pos, i);
+        maxR = Math.max(maxR, Math.hypot(v.x, v.z));
+        minY = Math.min(minY, v.y);
+        resting.push(v.applyMatrix4(rest));
       }
+    });
+    const reach = half - 0.5 + PLANT_REACH;
+    for (const [x, z] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+      resting.push(new THREE.Vector3(x * reach, PLANT_TOP, z * reach).applyMatrix4(rest));
     }
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    const dir = new THREE.Vector3(0, Math.sin(ELEVATION), Math.cos(ELEVATION));
-    target.set(0, 0, 0);
-    const place = (dist: number) => {
-      camera.position.copy(target).addScaledVector(dir, dist);
-      camera.lookAt(target);
-      camera.updateMatrixWorld();
-    };
-    const bounds = () => {
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const p of pts) {
-        tmp.copy(p).project(camera);
-        minX = Math.min(minX, tmp.x); maxX = Math.max(maxX, tmp.x);
-        minY = Math.min(minY, tmp.y); maxY = Math.max(maxY, tmp.y);
-      }
-      return { minX, maxX, minY, maxY };
-    };
-    // Twice: find the distance, then centre the island vertically and refit.
-    for (let pass = 0; pass < 2; pass++) {
-      let lo = 1, hi = 400;
-      for (let k = 0; k < 40; k++) {
+    const widest: THREE.Vector3[] = [];
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      const c = Math.cos(a), s = Math.sin(a);
+      widest.push(new THREE.Vector3(c * maxR, -0.1, s * maxR));
+      widest.push(new THREE.Vector3(c * maxR * 0.8, minY + 0.1, s * maxR * 0.8));
+      widest.push(new THREE.Vector3(c * reach * Math.SQRT2, PLANT_TOP, s * reach * Math.SQRT2));
+    }
+    return { resting, widest };
+  }
+
+  const dir = new THREE.Vector3(0, Math.sin(ELEVATION), Math.cos(ELEVATION));
+  const place = (at: THREE.Vector3, dist: number) => {
+    camera.position.copy(at).addScaledVector(dir, dist);
+    camera.lookAt(at);
+    camera.updateMatrixWorld();
+  };
+  const bounds = (pts: THREE.Vector3[]) => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of pts) {
+      tmp.copy(p).project(camera);
+      minX = Math.min(minX, tmp.x); maxX = Math.max(maxX, tmp.x);
+      minY = Math.min(minY, tmp.y); maxY = Math.max(maxY, tmp.y);
+    }
+    return { minX, maxX, minY, maxY };
+  };
+  /** Camera distance and look-at point that fit `pts` within `fill`, centred. */
+  function fit(pts: THREE.Vector3[], fill: number) {
+    const at = new THREE.Vector3();
+    let dist = 400;
+    for (let pass = 0; pass < 3; pass++) {
+      let lo = 0.5, hi = 400;
+      for (let k = 0; k < 36; k++) {
         const mid = (lo + hi) / 2;
-        place(mid);
-        const b = bounds();
-        const fits = (b.maxX - b.minX) / 2 <= FILL && (b.maxY - b.minY) / 2 <= FILL;
+        place(at, mid);
+        const b = bounds(pts);
+        const fits = (b.maxX - b.minX) / 2 <= fill && (b.maxY - b.minY) / 2 <= fill;
         if (fits) hi = mid; else lo = mid;
       }
-      place(hi);
-      if (pass === 0) {
-        const b = bounds();
-        const centreY = (b.maxY + b.minY) / 2; // in NDC
-        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
-        const worldPerNdc = hi * Math.tan(THREE.MathUtils.degToRad(FOV / 2));
-        target.addScaledVector(up, centreY * worldPerNdc);
-      }
+      dist = hi;
+      place(at, dist);
+      // Centre the projection: shift the look-at point by the NDC offset.
+      const b = bounds(pts);
+      const t = dist * Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+      at.addScaledVector(up, ((b.maxY + b.minY) / 2) * t);
+      at.addScaledVector(right, ((b.maxX + b.minX) / 2) * t * camera.aspect);
     }
+    return { dist, at };
+  }
+
+  function frame() {
+    if (n === 0 || !island) return; // not synced yet
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    const { resting, widest } = framePoints();
+    const a = fit(resting, FILL);
+    const b = fit(widest, MAX_FILL);
+    const best = a.dist >= b.dist ? a : b;
+    target.copy(best.at);
+    place(target, best.dist);
   }
 
   function resize() {
@@ -269,6 +351,9 @@ function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spo
     height = Math.max(1, Math.round(r.height));
     renderer.setSize(width, height, false);
     frame();
+    // Draw straight away, even before the visibility and intersection
+    // observers have reported (a hidden pane never runs rAF).
+    drawNow(performance.now());
     invalidate();
   }
 
@@ -413,29 +498,30 @@ function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spo
   }
 
   function syncSpots() {
-    while (spotLayer.children.length) spotLayer.remove(spotLayer.children[0]);
-    if (sprout) {
-      sprout.dispose();
-      sprout = null;
+    if (discsFor !== n) {
+      // New grid size: one ring per spot, all sharing a geometry and material.
+      for (const d of discs.values()) spotLayer.remove(d);
+      discs.clear();
+      for (const s of spots(n)) {
+        const disc = new THREE.Mesh(discGeo, discMat);
+        disc.position.copy(spotToWorld(s)).setY(0.006);
+        disc.renderOrder = 1;
+        disc.visible = false;
+        spotLayer.add(disc);
+        discs.set(spotKey(s), disc);
+      }
+      discsFor = n;
     }
     free = new Set();
-    if (!input.pickable) return;
-    const occupied: Spot[] = [...input.plants];
-    if (input.growing) occupied.push(input.growing.spot);
-    const sel = input.selectedSpot ? spotKey(input.selectedSpot) : null;
-    for (const s of freeSpots(n, occupied)) {
-      const k = spotKey(s);
-      free.add(k);
-      const disc = new THREE.Mesh(discGeo, k === sel ? selectedMat : discMat);
-      disc.position.copy(spotToWorld(s)).setY(0.006);
-      disc.renderOrder = 1;
-      spotLayer.add(disc);
-      if (k === sel) {
-        sprout = buildSprout(theme);
-        sprout.group.position.copy(spotToWorld(s));
-        spotLayer.add(sprout.group);
-      }
+    if (input.pickable) {
+      const occupied: Spot[] = [...input.plants];
+      if (input.growing) occupied.push(input.growing.spot);
+      for (const s of freeSpots(n, occupied)) free.add(spotKey(s));
     }
+    const sel = input.selectedSpot ? spotKey(input.selectedSpot) : null;
+    for (const [k, d] of discs) d.visible = free.has(k) && k !== sel;
+    marker.group.visible = sel !== null && free.has(sel);
+    if (marker.group.visible && input.selectedSpot) marker.group.position.copy(spotToWorld(input.selectedSpot));
   }
 
   // --- interaction ---------------------------------------------------------
@@ -571,14 +657,17 @@ function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spo
     const busy = animating(now) || dirty;
     const interval = busy ? ACTIVE_INTERVAL : swaying() ? SWAY_INTERVAL : Infinity;
     if (interval === Infinity) return; // nothing changes; invalidate() restarts
-    if (now - lastDraw >= interval - 2) {
-      update(now, now - lastUpdate);
-      lastUpdate = now;
-      renderer.render(scene, camera);
-      lastDraw = now;
-      dirty = false;
-    }
+    if (now - lastDraw >= interval - 2) drawNow(now);
     raf = requestAnimationFrame(loop);
+  }
+
+  function drawNow(now: number) {
+    if (disposed || contextLost) return;
+    update(now, now - lastUpdate);
+    lastUpdate = now;
+    renderer.render(scene, camera);
+    lastDraw = now;
+    dirty = false;
   }
 
   /** Something changed: make sure a frame is coming. */
@@ -691,11 +780,10 @@ function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spo
       for (const e of kept.values()) e.model.dispose();
       kept.clear();
       disposeGrowing();
-      if (sprout) sprout.dispose();
+      marker.dispose();
       island?.dispose();
       discGeo.dispose();
       discMat.dispose();
-      selectedMat.dispose();
       renderer.dispose();
       renderer.forceContextLoss(); // free the GL context now, not at GC
       canvas.remove();

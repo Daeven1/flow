@@ -73,8 +73,10 @@ export default function GroveLab() {
   }, [picked, n, plants]);
 
   const growing = useMemo<Growing | null>(
-    () => (showGrowing && spot ? { species, spot, progress: growth / 100, outcome } : null),
-    [showGrowing, spot, species, growth, outcome],
+    // While picking there is no session yet, so no growing plant: that also
+    // keeps the selected-spot marker visible.
+    () => (showGrowing && !pickable && spot ? { species, spot, progress: growth / 100, outcome } : null),
+    [showGrowing, pickable, spot, species, growth, outcome],
   );
 
   const total = count + (growing ? 1 : 0);

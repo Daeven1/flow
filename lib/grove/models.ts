@@ -5,6 +5,10 @@
  * runs in Vitest's node environment. Every material is flat shaded, there are
  * no textures and no model files, and all randomness comes from mulberry32 so
  * the same seed always gives the same plant.
+ *
+ * Low-poly here means chunky faceted solids: tapered prisms for stems, broad
+ * creased blades for leaves, faceted heads for blooms. Budgets: a plant stays
+ * under about 400 triangles, the island under about 1,500.
  */
 import * as THREE from "three";
 import type { Species, Spot } from "./layout";
@@ -29,7 +33,7 @@ export function mulberry32(seed: number): () => number {
 }
 
 export function fullHeight(species: Species): number {
-  return species === "WILDFLOWERS" ? 0.5 : 0.45;
+  return species === "WILDFLOWERS" ? 0.7 : 0.6;
 }
 
 /** Spots are 1 unit apart; {x:-0.5,y:-0.5} is the origin; grid y is world z. */
@@ -42,25 +46,27 @@ export function spotToWorld(spot: Spot): THREE.Vector3 {
 
 const PALETTE = {
   light: {
-    stem: 0x5f8f3e,
-    leaf: 0x72a64a,
-    fern: 0x4f8f3f,
-    fernRachis: 0x5a7f35,
+    stem: 0x4a7f2e,
+    leaf: 0x4b8a34,
+    fern: 0x3f8a3a,
+    fernRachis: 0x44702b,
     blooms: [0xf2c230, 0xf08a6c, 0xb497d6], // buttercup, soft coral, lilac
     bloomCentre: 0xc98a2e,
-    grass: 0x7db356,
-    soil: 0x8b6a47,
+    grass: 0x93c768,
+    soil: 0x9a7149,
+    soilDeep: 0x6f4f33,
   },
   dark: {
     // Deeper, more saturated greens; blooms kept bright against Midnight Navy.
-    stem: 0x3f7f2a,
-    leaf: 0x4a9c30,
-    fern: 0x2f8a36,
-    fernRachis: 0x3c6e26,
+    stem: 0x3f8a2a,
+    leaf: 0x3e9a30,
+    fern: 0x2f9a3c,
+    fernRachis: 0x3c7a27,
     blooms: [0xffd23f, 0xff8e72, 0xc9a8ff],
     bloomCentre: 0xe8a33c,
-    grass: 0x4e9a3a,
-    soil: 0x5e4430,
+    grass: 0x5a8f3c,
+    soil: 0x7a5636,
+    soilDeep: 0x4d3522,
   },
 } as const;
 
@@ -91,7 +97,7 @@ function track<G extends THREE.BufferGeometry>(tr: Tracker, g: G): G {
 }
 
 function material(tr: Tracker, color: number | THREE.Color, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) {
-  const m = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9, metalness: 0, ...opts });
+  const m = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, metalness: 0, ...opts });
   tr.materials.push(m);
   return m;
 }
@@ -105,9 +111,12 @@ function disposer(tr: Tracker) {
   };
 }
 
-/** Thin open tube of unit height with its base at y = 0. */
-function stalkGeometry(tr: Tracker, rTop: number, rBottom: number, sides: number) {
-  const g = new THREE.CylinderGeometry(rTop, rBottom, 1, sides, 1, true);
+/**
+ * Tapered open prism of unit height and unit base radius, base at y = 0.
+ * Scale x/z to the base radius and y to the length.
+ */
+function prismGeometry(tr: Tracker, sides: number, taper: number) {
+  const g = new THREE.CylinderGeometry(taper, 1, 1, sides, 1, true);
   g.translate(0, 0.5, 0);
   return track(tr, g);
 }
@@ -136,36 +145,44 @@ function fitHeight(group: THREE.Group, body: THREE.Group, target: number) {
 }
 
 // ---------------------------------------------------------------------------
-// Wildflowers: a clump of 5-7 thin stems with small faceted blooms.
+// Wildflowers: a rosette of broad basal leaves with 3-5 stems rising out of
+// it, each ending in a faceted five-petal head.
 //
-// Each stem is two straight pieces joined at a knee so it can arch and droop.
-// Stems rise first (t 0-0.5), leaves unfold (0.3-0.8), blooms open (0.7-1).
+// Each stem is two tapered prisms joined at a knee so it can arch and droop.
+// Basal leaves unfold first (t 0-0.45), stems rise (0.15-0.65), stem leaves
+// open (0.35-0.8), blooms open last (0.65-1).
 
-function petalGeometry(tr: Tracker) {
-  // Five petals as a shallow star-shaped cup: a raised centre, petal tips
-  // tilted up, notches between them. Unit radius.
+function bloomGeometry(tr: Tracker) {
+  // Five flattened petal wedges round a raised centre, over a shallow cone,
+  // so the head is a solid faceted cup. Unit radius.
   const pts: number[] = [];
   const rim: THREE.Vector3[] = [];
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * Math.PI * 2;
     const tip = i % 2 === 0;
-    const r = tip ? 1 : 0.42;
-    rim.push(new THREE.Vector3(Math.cos(a) * r, tip ? 0.32 : 0.08, Math.sin(a) * r));
+    const r = tip ? 1 : 0.5;
+    rim.push(new THREE.Vector3(Math.cos(a) * r, tip ? 0.3 : 0.1, Math.sin(a) * r));
   }
-  const c = new THREE.Vector3(0, 0.05, 0);
+  const top = new THREE.Vector3(0, 0.14, 0);
+  const under = new THREE.Vector3(0, -0.32, 0);
   for (let i = 0; i < 10; i++) {
     const p = rim[i];
     const q = rim[(i + 1) % 10];
-    pts.push(c.x, c.y, c.z, q.x, q.y, q.z, p.x, p.y, p.z);
+    pts.push(top.x, top.y, top.z, q.x, q.y, q.z, p.x, p.y, p.z);
+    pts.push(under.x, under.y, under.z, p.x, p.y, p.z, q.x, q.y, q.z);
   }
   return fromTriangles(tr, pts);
 }
 
-function leafGeometry(tr: Tracker) {
-  // A flat diamond leaf pointing along +x, unit length, in the x-z plane.
+function bladeGeometry(tr: Tracker) {
+  // A broad leaf along +x, unit length, with a raised midrib so its two
+  // halves catch the light differently.
+  const base = [0, 0, 0], l = [0.42, 0.03, -0.3], tip = [1, 0.08, 0], r = [0.42, 0.03, 0.3], m = [0.46, 0.1, 0];
   return fromTriangles(tr, [
-    0, 0, 0, 0.5, 0.02, -0.18, 1, 0.06, 0,
-    0, 0, 0, 1, 0.06, 0, 0.5, 0.02, 0.18,
+    ...base, ...m, ...l,
+    ...l, ...m, ...tip,
+    ...base, ...r, ...m,
+    ...m, ...r, ...tip,
   ]);
 }
 
@@ -180,16 +197,17 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
   group.add(body);
 
   // Shared within the plant.
-  const stalkGeo = stalkGeometry(tr, 0.006, 0.01, 4);
-  const petalGeo = petalGeometry(tr);
+  const stalkGeo = prismGeometry(tr, 5, 0.6);
+  const bloomGeo = bloomGeometry(tr);
   const centreGeo = track(tr, new THREE.OctahedronGeometry(1, 0));
-  const leafGeo = leafGeometry(tr);
+  const bladeGeo = bladeGeometry(tr);
 
   const stemMat = material(tr, pal.stem);
   const leafMat = material(tr, pal.leaf, { side: THREE.DoubleSide });
   const centreMat = material(tr, pal.bloomCentre);
 
-  // Two or three bloom colours from the warm palette.
+  // Two or three bloom colours from the warm palette, cycled across stems so
+  // every clump shows all of them.
   const order = [0, 1, 2];
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
@@ -207,43 +225,51 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
     ...bloomMats.map((m) => ({ mat: m, healthy: m.color.clone(), dried: DRIED_BLOOM })),
   ];
 
+  // Basal rosette.
+  type Leaf = { holder: THREE.Group; mesh: THREE.Mesh; size: number; lift: number };
+  const basal: Leaf[] = [];
+  const basalCount = 5 + Math.floor(rand() * 3); // 5-7
+  for (let k = 0; k < basalCount; k++) {
+    const holder = new THREE.Group();
+    holder.rotation.order = "YXZ";
+    holder.rotation.y = (k / basalCount) * Math.PI * 2 + rand() * 0.6;
+    const mesh = new THREE.Mesh(bladeGeo, leafMat);
+    holder.add(mesh);
+    body.add(holder);
+    basal.push({ holder, mesh, size: 0.29 + rand() * 0.08, lift: 0.25 + rand() * 0.25 });
+  }
+
   type Stem = {
     pivot: THREE.Group; lean: number; yaw: number;
-    lower: THREE.Mesh; lowerLen: number;
+    lower: THREE.Mesh; lowerLen: number; radius: number;
     knee: THREE.Group; bend: number;
     upper: THREE.Mesh; upperLen: number;
-    leaves: { holder: THREE.Group; mesh: THREE.Mesh; at: number; size: number }[];
+    leaf: Leaf & { at: number };
     bloomHolder: THREE.Group; bloom: THREE.Group; bloomSize: number;
   };
   const stems: Stem[] = [];
-  const count = 5 + Math.floor(rand() * 3); // 5-7
+  const count = 3 + Math.floor(rand() * 3); // 3-5
   for (let i = 0; i < count; i++) {
     const yaw = (i / count) * Math.PI * 2 + rand() * 0.8;
-    const r = 0.015 + rand() * 0.05;
+    const r = 0.02 + rand() * 0.05;
     const pivot = new THREE.Group();
     pivot.position.set(Math.cos(yaw) * r, 0, Math.sin(yaw) * r);
     pivot.rotation.order = "YXZ";
     body.add(pivot);
 
-    const len = 0.32 + rand() * 0.2;
+    const len = 0.5 + rand() * 0.18;
     const lowerLen = len * (0.55 + rand() * 0.1);
     const upperLen = len - lowerLen;
 
     const lower = new THREE.Mesh(stalkGeo, stemMat);
     pivot.add(lower);
 
-    const leaves: Stem["leaves"] = [];
-    const leafCount = 1 + Math.floor(rand() * 2);
-    for (let k = 0; k < leafCount; k++) {
-      const holder = new THREE.Group();
-      holder.rotation.order = "YXZ";
-      holder.rotation.y = rand() * Math.PI * 2;
-      holder.rotation.z = 0.5 + rand() * 0.4; // tilt the leaf tip upwards
-      const mesh = new THREE.Mesh(leafGeo, leafMat);
-      holder.add(mesh);
-      pivot.add(holder);
-      leaves.push({ holder, mesh, at: 0.35 + rand() * 0.35, size: 0.07 + rand() * 0.04 });
-    }
+    const leafHolder = new THREE.Group();
+    leafHolder.rotation.order = "YXZ";
+    leafHolder.rotation.y = rand() * Math.PI * 2;
+    const leafMesh = new THREE.Mesh(bladeGeo, leafMat);
+    leafHolder.add(leafMesh);
+    pivot.add(leafHolder);
 
     const knee = new THREE.Group();
     pivot.add(knee);
@@ -254,44 +280,49 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
     knee.add(bloomHolder);
     const bloom = new THREE.Group();
     bloomHolder.add(bloom);
-    // Cycle through the chosen colours so every clump really shows all of them.
-    const petals = new THREE.Mesh(petalGeo, bloomMats[i % bloomMats.length]);
+    const petals = new THREE.Mesh(bloomGeo, bloomMats[i % bloomMats.length]);
     const centre = new THREE.Mesh(centreGeo, centreMat);
-    centre.scale.set(0.28, 0.2, 0.28);
-    centre.position.y = 0.08;
+    centre.scale.set(0.3, 0.22, 0.3);
+    centre.position.y = 0.16;
     bloom.add(petals, centre);
     bloom.rotation.y = rand() * Math.PI;
 
     stems.push({
-      pivot, yaw, lean: 0.08 + rand() * 0.3,
-      lower, lowerLen, knee, bend: 0.05 + rand() * 0.2, upper, upperLen,
-      leaves, bloomHolder, bloom, bloomSize: 0.035 + rand() * 0.02,
+      pivot, yaw, lean: 0.15 + rand() * 0.25, radius: 0.017 + rand() * 0.002,
+      lower, lowerLen, knee, bend: 0.05 + rand() * 0.18, upper, upperLen,
+      leaf: { holder: leafHolder, mesh: leafMesh, size: 0.12 + rand() * 0.04, lift: 0.6 + rand() * 0.3, at: 0.35 + rand() * 0.3 },
+      bloomHolder, bloom, bloomSize: 0.056 + rand() * 0.006,
     });
   }
 
   let growth = 1;
   let withered = 0;
   const apply = () => {
-    const rise = stage(growth, 0, 0.5);
-    const unfold = stage(growth, 0.3, 0.8);
-    const open = stage(growth, 0.7, 1);
+    const leafOpen = stage(growth, 0, 0.45);
+    const rise = stage(growth, 0.15, 0.65);
+    const unfold = stage(growth, 0.35, 0.8);
+    const open = stage(growth, 0.65, 1);
     const w = withered;
+    for (const l of basal) {
+      // Young leaves stand up; grown ones spread; withered ones lie flat.
+      l.holder.rotation.z = lerp(1.1, l.lift, leafOpen) - w * (l.lift + 0.15);
+      l.mesh.scale.setScalar(tiny(l.size * leafOpen * (1 - 0.2 * w)));
+    }
     for (const s of stems) {
       // Young stems stand straighter; withered ones lean and droop.
       s.pivot.rotation.set(0, s.yaw, -(s.lean * (0.5 + 0.5 * rise) + w * 0.55));
-      const thick = 0.4 + 0.6 * rise;
-      s.lower.scale.set(thick, tiny(s.lowerLen * rise), thick);
+      const rad = s.radius * (0.45 + 0.55 * rise);
+      s.lower.scale.set(rad, tiny(s.lowerLen * rise), rad);
       s.knee.position.y = s.lowerLen * rise;
       s.knee.rotation.z = -(s.bend * rise + w * 0.6);
-      s.upper.scale.set(thick, tiny(s.upperLen * rise), thick);
+      s.upper.scale.set(rad * 0.6, tiny(s.upperLen * rise), rad * 0.6);
       s.bloomHolder.position.y = s.upperLen * rise;
-      s.bloomHolder.rotation.z = -w * 0.7; // heads hang
-      s.bloom.scale.setScalar(tiny(s.bloomSize * open * (1 - 0.45 * w)));
-      for (const l of s.leaves) {
-        l.holder.position.y = s.lowerLen * rise * l.at;
-        l.mesh.scale.setScalar(tiny(l.size * unfold * (1 - 0.25 * w)));
-        l.mesh.rotation.z = -w * 0.45; // leaves sag
-      }
+      // Heads turn back towards the sky; withered heads hang.
+      s.bloomHolder.rotation.z = (s.lean + s.bend) * 0.7 * (1 - w) - w * 0.8;
+      s.bloom.scale.setScalar(tiny(s.bloomSize * open * (1 - 0.4 * w)));
+      s.leaf.holder.position.y = s.lowerLen * rise * s.leaf.at;
+      s.leaf.holder.rotation.z = s.leaf.lift - w * 0.7;
+      s.leaf.mesh.scale.setScalar(tiny(s.leaf.size * unfold * (1 - 0.25 * w)));
     }
     applyColours(shifts, w);
   };
@@ -308,7 +339,8 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
 }
 
 // ---------------------------------------------------------------------------
-// Fern: 6-8 arching fronds of flat tapered leaflets.
+// Fern: a rosette of 6-7 arching fronds, each a tapered strip of broad
+// creased leaflets on a three-sided rachis.
 //
 // Each frond is a chain of segments; each joint bends a little so the frond
 // arches. While young the joints are curled tight like a fiddlehead and
@@ -318,11 +350,14 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
 const FROND_SEGMENTS = 4;
 
 function leafletGeometry(tr: Tracker) {
-  // A tapered leaflet in the y-z plane (x = 0), base on the rachis, reaching
-  // out along +z and sweeping slightly towards the frond tip (+y). Unit size.
+  // A broad leaflet: its base runs along the rachis (local y, 0..1) and it
+  // reaches out along +z (0..1), sweeping towards the frond tip. A slight
+  // crease in x makes its facets read. Unit size.
+  const p0 = [0, 0, 0], p1 = [0.12, 0.22, 0.62], p2 = [0.18, 0.85, 1], p3 = [0.1, 1.08, 0.5], p4 = [0, 1, 0];
   return fromTriangles(tr, [
-    0, 0, 0, 0, 0.32, 0.38, 0, 0.22, 1,
-    0, 0, 0, 0, 0.22, 1, 0, -0.04, 0.45,
+    ...p0, ...p1, ...p2,
+    ...p0, ...p2, ...p4,
+    ...p2, ...p3, ...p4,
   ]);
 }
 
@@ -336,7 +371,7 @@ function buildFern(seed: number, theme: Theme): PlantModel {
   const body = new THREE.Group();
   group.add(body);
 
-  const rachisGeo = stalkGeometry(tr, 0.005, 0.009, 3);
+  const rachisGeo = prismGeometry(tr, 3, 0.55);
   const leafletGeo = leafletGeometry(tr);
   const rachisMat = material(tr, pal.fernRachis);
   const leafMat = material(tr, pal.fern, { side: THREE.DoubleSide });
@@ -351,7 +386,7 @@ function buildFern(seed: number, theme: Theme): PlantModel {
     segments: Segment[]; tip: THREE.Mesh; tipSize: number;
   };
   const fronds: Frond[] = [];
-  const count = 6 + Math.floor(rand() * 3); // 6-8
+  const count = 6 + Math.floor(rand() * 2); // 6-7
   for (let i = 0; i < count; i++) {
     const yawGroup = new THREE.Group();
     yawGroup.rotation.y = (i / count) * Math.PI * 2 + (rand() - 0.5) * 0.5;
@@ -359,9 +394,9 @@ function buildFern(seed: number, theme: Theme): PlantModel {
     const tilt = new THREE.Group(); // leans the frond outwards (+x)
     yawGroup.add(tilt);
 
-    const length = 0.38 + rand() * 0.16;
+    const length = 0.52 + rand() * 0.12;
     const segLen = length / FROND_SEGMENTS;
-    const leafletLen = 0.06 + rand() * 0.025;
+    const leafletLen = 0.1 + rand() * 0.025;
 
     const segments: Segment[] = [];
     let parent: THREE.Group = tilt;
@@ -371,14 +406,18 @@ function buildFern(seed: number, theme: Theme): PlantModel {
       const rachis = new THREE.Mesh(rachisGeo, rachisMat);
       joint.add(rachis);
       const leaflets: THREE.Mesh[] = [];
-      for (const side of [0, Math.PI]) {
+      // Local -x faces the sky once the frond leans out, so turning each
+      // leaflet a little towards -x lifts its outer edge into a shallow V.
+      for (const side of [-0.35, Math.PI + 0.35]) {
         const leaflet = new THREE.Mesh(leafletGeo, leafMat);
+        leaflet.rotation.order = "YXZ";
         leaflet.rotation.y = side;
         joint.add(leaflet);
         leaflets.push(leaflet);
       }
-      // Leaflets taper towards the tip.
-      segments.push({ joint, rachis, leaflets, size: leafletLen * (1 - (j / FROND_SEGMENTS) * 0.55) });
+      // Leaflets are widest just below the middle and taper to the tip.
+      const taper = [0.85, 1, 0.82, 0.55][j];
+      segments.push({ joint, rachis, leaflets, size: leafletLen * taper });
       parent = joint;
     }
     const tip = new THREE.Mesh(leafletGeo, leafMat);
@@ -387,8 +426,8 @@ function buildFern(seed: number, theme: Theme): PlantModel {
     parent.add(tip);
 
     fronds.push({
-      tilt, pitch: 0.25 + rand() * 0.2, arch: 0.12 + rand() * 0.1, segLen,
-      segments, tip, tipSize: leafletLen * 0.6,
+      tilt, pitch: 0.2 + rand() * 0.16, arch: 0.12 + rand() * 0.06, segLen,
+      segments, tip, tipSize: leafletLen * 0.5,
     });
   }
 
@@ -398,10 +437,10 @@ function buildFern(seed: number, theme: Theme): PlantModel {
     const rise = stage(growth, 0, 0.5);
     const tipOpen = stage(growth, 0.7, 1);
     const w = withered;
-    const thick = 0.5 + 0.5 * rise;
+    const rad = 0.014 * (0.5 + 0.5 * rise);
     for (const f of fronds) {
       // Young fronds stand nearly upright; withered ones sag outwards.
-      f.tilt.rotation.z = -(f.pitch * (0.3 + 0.7 * rise) + w * 0.35);
+      f.tilt.rotation.z = -(f.pitch * (0.3 + 0.7 * rise) + w * 0.45);
       let prevLen = 0;
       f.segments.forEach((s, j) => {
         // Base leaflets unfold first, the outer ones later.
@@ -411,17 +450,19 @@ function buildFern(seed: number, theme: Theme): PlantModel {
         const len = f.segLen * rise * (j === 0 ? 1 : lerp(0.45, 1, unfold));
         s.joint.position.y = prevLen;
         const curl = j === 0 ? 0 : (1 - unfold) * 0.9;
-        s.joint.rotation.z = -(j === 0 ? 0 : f.arch + curl + w * 0.2);
-        s.rachis.scale.set(thick, tiny(len), thick);
+        s.joint.rotation.z = -(j === 0 ? 0 : f.arch + curl + w * 0.25);
+        s.rachis.scale.set(rad, tiny(len), rad);
+        const out = tiny(s.size * unfold * (1 - 0.3 * w));
         for (const l of s.leaflets) {
-          l.position.y = len * 0.35;
-          l.scale.setScalar(tiny(s.size * unfold * (1 - 0.3 * w)));
+          // The leaflet's base spans its segment, a little overlapping the next.
+          l.scale.set(out, tiny(len * 1.15), out);
           l.rotation.z = w * 0.5; // leaflets fold back as they dry
         }
         prevLen = len;
       });
       f.tip.position.y = prevLen;
-      f.tip.scale.setScalar(tiny(f.tipSize * tipOpen * (1 - 0.3 * w)));
+      const t = tiny(f.tipSize * tipOpen * (1 - 0.3 * w));
+      f.tip.scale.set(t, t, t * 1.4);
     }
     applyColours(shifts, w);
   };
@@ -442,14 +483,16 @@ export function buildPlant(species: Species, seed: number, theme: Theme): PlantM
 }
 
 // ---------------------------------------------------------------------------
-// Island: a low faceted mound of grass with a darker soil skirt, no water.
+// Island: a low faceted mound of grass on a thick earthy skirt, no water.
 //
-// The top is flat at y = 0 over the n x n grid plus a small margin, then
-// slopes down to an irregular rim about 0.6 beyond the grid; the soil skirt
-// runs from the rim down to a narrower base. Faces get slight colour jitter so
-// the facets read even under flat light.
+// The top is a jittered grid, warped from a square onto the island's
+// irregular rounded-square outline (about 0.6 beyond the n x n planting
+// grid). It is flat at y = 0 over the planting grid plus a small margin and
+// rolls gently down towards the rim. Each facet takes one of three close
+// greens. The soil skirt runs from the rim down about 0.5 to a narrower base,
+// darkening towards the bottom.
 
-const ISLAND_SIDES = 64;
+const ISLAND_MAX_CELLS = 16;
 
 /** Distance along direction (cos a, sin a) to the edge of a rounded square. */
 function roundedSquareRadius(half: number, offset: number, a: number) {
@@ -477,46 +520,119 @@ export function buildIsland(n: number, theme: Theme): { group: THREE.Group; disp
   const pal = PALETTE[theme];
   const tr: Tracker = { geometries: [], materials: [] };
   const half = n / 2;
+  const flatHalf = half + 0.2;
+  const cells = Math.min(n + 2, ISLAND_MAX_CELLS);
 
-  type Ring = THREE.Vector3[];
-  const ring = (offset: (i: number) => number, y: (i: number) => number): Ring => {
-    const out: Ring = [];
-    for (let i = 0; i < ISLAND_SIDES; i++) {
-      const a = (i / ISLAND_SIDES) * Math.PI * 2;
-      const r = roundedSquareRadius(half, offset(i), a);
-      out.push(new THREE.Vector3(Math.cos(a) * r, y(i), Math.sin(a) * r));
+  // Irregular outline: a few seeded waves round the rim.
+  const waves = [1, 2, 3].map((k) => ({ k: k + 1, amp: rand() * 0.06, ph: rand() * Math.PI * 2 }));
+  const outlineOffset = (a: number) =>
+    0.6 + waves.reduce((s, w) => s + w.amp * (1 + Math.sin(w.k * a + w.ph)), 0);
+
+  // Grid points in uv in [-1, 1]^2, interior ones jittered, then warped so
+  // the square's ring at max(|u|,|v|) = s lands at s times the outline.
+  const step = 2 / cells;
+  const grid: THREE.Vector3[][] = [];
+  for (let i = 0; i <= cells; i++) {
+    grid.push([]);
+    for (let j = 0; j <= cells; j++) {
+      let u = -1 + i * step;
+      let v = -1 + j * step;
+      const edge = i === 0 || j === 0 || i === cells || j === cells;
+      if (!edge) {
+        u += (rand() - 0.5) * step * 0.55;
+        v += (rand() - 0.5) * step * 0.55;
+      }
+      const s = Math.max(Math.abs(u), Math.abs(v));
+      const a = Math.atan2(v, u);
+      const r = s === 0 ? 0 : s * roundedSquareRadius(half, outlineOffset(a), a);
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      // Flat over the planting grid; beyond it, roll down to the rim.
+      const beyond = Math.max(Math.abs(x), Math.abs(z)) - flatHalf;
+      let y = 0;
+      if (beyond > 0) {
+        const rimDist = Math.max(0.05, roundedSquareRadius(half, outlineOffset(a), a) - flatHalf / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a))));
+        const e = Math.min(1, beyond / rimDist);
+        y = -0.13 * e * e - (edge ? 0.02 + rand() * 0.03 : rand() * 0.02 * e);
+      }
+      grid[i].push(new THREE.Vector3(x, y, z));
     }
-    return out;
+  }
+
+  type Tri = { p: THREE.Vector3; q: THREE.Vector3; r: THREE.Vector3 };
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  /** Adds a triangle wound so its normal points along `want`. */
+  const add = (out: Tri[], p: THREE.Vector3, q: THREE.Vector3, r: THREE.Vector3, want: THREE.Vector3) => {
+    ab.subVectors(q, p);
+    ac.subVectors(r, p);
+    const flip = ab.cross(ac).dot(want) < 0;
+    out.push(flip ? { p, q: r, r: q } : { p, q, r });
   };
 
-  // Irregular rim: smooth-ish noise from a few seeded waves plus per-point jitter.
-  const waves = [1, 2, 3].map((k) => ({ k: k + 1, amp: rand() * 0.05, ph: rand() * Math.PI * 2 }));
-  const wobble = (i: number) => {
-    const a = (i / ISLAND_SIDES) * Math.PI * 2;
-    return waves.reduce((s, w) => s + w.amp * (1 + Math.sin(w.k * a + w.ph)), 0);
+  const up = new THREE.Vector3(0, 1, 0);
+  const grassTris: Tri[] = [];
+  for (let i = 0; i < cells; i++) {
+    for (let j = 0; j < cells; j++) {
+      const a = grid[i][j], b = grid[i + 1][j], c = grid[i + 1][j + 1], d = grid[i][j + 1];
+      if (rand() < 0.5) {
+        add(grassTris, a, b, c, up);
+        add(grassTris, a, c, d, up);
+      } else {
+        add(grassTris, a, b, d, up);
+        add(grassTris, b, c, d, up);
+      }
+    }
+  }
+
+  // The rim: the grid's border, walked once round.
+  const rim: THREE.Vector3[] = [];
+  for (let i = 0; i < cells; i++) rim.push(grid[i][0]);
+  for (let j = 0; j < cells; j++) rim.push(grid[cells][j]);
+  for (let i = cells; i > 0; i--) rim.push(grid[i][cells]);
+  for (let j = cells; j > 0; j--) rim.push(grid[0][j]);
+  const m = rim.length;
+  // Nearly vertical at first so the camera sees the earth, then tucking in.
+  const mid = rim.map((p) => new THREE.Vector3(p.x * 0.995, p.y - 0.22 - rand() * 0.06, p.z * 0.995));
+  const base = rim.map((p) => new THREE.Vector3(p.x * 0.88, -0.46 - rand() * 0.08, p.z * 0.88));
+  const bottom = new THREE.Vector3(0, -0.58, 0);
+
+  const outward = (p: THREE.Vector3, q: THREE.Vector3) =>
+    new THREE.Vector3((p.x + q.x) / 2, 0, (p.z + q.z) / 2).normalize().setY(-0.3);
+  const upperSoil: Tri[] = [];
+  const lowerSoil: Tri[] = [];
+  const underside: Tri[] = [];
+  for (let i = 0; i < m; i++) {
+    const k = (i + 1) % m;
+    const o = outward(rim[i], rim[k]);
+    add(upperSoil, rim[i], rim[k], mid[i], o);
+    add(upperSoil, rim[k], mid[k], mid[i], o);
+    add(lowerSoil, mid[i], mid[k], base[i], o);
+    add(lowerSoil, mid[k], base[k], base[i], o);
+    add(underside, bottom, base[i], base[k], new THREE.Vector3(0, -1, 0));
+  }
+
+  // Each facet takes one of a few close shades of its base colour.
+  const shades = (hex: number, steps: [number, number][]) => {
+    const c = new THREE.Color(hex);
+    const hsl = { h: 0, s: 0, l: 0 };
+    c.getHSL(hsl);
+    return steps.map(([dh, dl]) => new THREE.Color().setHSL(hsl.h + dh, hsl.s, hsl.l * dl));
   };
-  const jitter = Array.from({ length: ISLAND_SIDES }, () => rand());
+  const greens = shades(pal.grass, [[0, 1], [0.012, 1.07], [-0.015, 0.93]]);
+  const soilUpper = shades(pal.soil, [[0, 1], [0.01, 1.06], [-0.01, 0.94]]);
+  const soilLower = shades(pal.soilDeep, [[0, 1.08], [0.01, 1], [-0.01, 0.92]]);
+  const soilBottom = shades(pal.soilDeep, [[0, 0.75]]);
 
-  const flat = ring(() => 0.15, () => 0);
-  const shoulder = ring((i) => 0.38 + wobble(i) * 0.5, (i) => -0.03 - jitter[i] * 0.02);
-  const rim = ring((i) => 0.6 + wobble(i) + jitter[i] * 0.08, (i) => -0.1 - jitter[(i + 7) % ISLAND_SIDES] * 0.04);
-  const base = ring((i) => 0.2 + wobble(i) * 0.6, (i) => -0.42 - jitter[(i + 13) % ISLAND_SIDES] * 0.12);
-  const centre = new THREE.Vector3(0, 0, 0);
-  const bottom = new THREE.Vector3(0, -0.5, 0);
-
-  const grassColour = new THREE.Color(pal.grass);
-  const soilColour = new THREE.Color(pal.soil);
-  const hsl = { h: 0, s: 0, l: 0 };
-
-  const build = (tris: [THREE.Vector3, THREE.Vector3, THREE.Vector3, number][], base: THREE.Color) => {
+  const build = (sets: [Tri[], THREE.Color[]][]) => {
     const pos: number[] = [];
     const col: number[] = [];
-    const c = new THREE.Color();
-    base.getHSL(hsl);
-    for (const [p, q, r, amount] of tris) {
-      pos.push(p.x, p.y, p.z, q.x, q.y, q.z, r.x, r.y, r.z);
-      c.setHSL(hsl.h + (rand() - 0.5) * 0.02 * amount, hsl.s, hsl.l * (1 + (rand() - 0.5) * 0.12 * amount));
-      for (let k = 0; k < 3; k++) col.push(c.r, c.g, c.b);
+    for (const [tris, palette] of sets) {
+      for (const { p, q, r } of tris) {
+        pos.push(p.x, p.y, p.z, q.x, q.y, q.z, r.x, r.y, r.z);
+        const c = palette[Math.floor(rand() * palette.length)];
+        for (let k = 0; k < 3; k++) col.push(c.r, c.g, c.b);
+      }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
@@ -525,40 +641,14 @@ export function buildIsland(n: number, theme: Theme): { group: THREE.Group; disp
     return track(tr, g);
   };
 
-  // Wound so faces point up (top) or out and down (skirt) for front-face culling.
-  type Tri = [THREE.Vector3, THREE.Vector3, THREE.Vector3, number];
-  const band = (inner: Ring, outer: Ring, amount: number, out: Tri[]) => {
-    for (let i = 0; i < ISLAND_SIDES; i++) {
-      const j = (i + 1) % ISLAND_SIDES;
-      out.push([inner[i], inner[j], outer[i], amount]);
-      out.push([inner[j], outer[j], outer[i], amount]);
-    }
-  };
-
-  const grassTris: Tri[] = [];
-  for (let i = 0; i < ISLAND_SIDES; i++) {
-    const j = (i + 1) % ISLAND_SIDES;
-    grassTris.push([centre, flat[j], flat[i], 0.4]);
-  }
-  band(flat, shoulder, 1, grassTris);
-  band(shoulder, rim, 1, grassTris);
-
-  // From the rim inwards and down to the base: faces point out and down.
-  const soilTris: Tri[] = [];
-  band(rim, base, 1, soilTris);
-  for (let i = 0; i < ISLAND_SIDES; i++) {
-    const j = (i + 1) % ISLAND_SIDES;
-    soilTris.push([bottom, base[i], base[j], 0.5]);
-  }
-
   const grassMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95, metalness: 0 });
   const soilMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0 });
   tr.materials.push(grassMat, soilMat);
 
   const group = new THREE.Group();
   group.name = "island";
-  const grass = new THREE.Mesh(build(grassTris, grassColour), grassMat);
-  const soil = new THREE.Mesh(build(soilTris, soilColour), soilMat);
+  const grass = new THREE.Mesh(build([[grassTris, greens]]), grassMat);
+  const soil = new THREE.Mesh(build([[upperSoil, soilUpper], [lowerSoil, soilLower], [underside, soilBottom]]), soilMat);
   group.add(grass, soil);
 
   return { group, dispose: disposer(tr) };
