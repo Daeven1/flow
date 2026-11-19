@@ -8,10 +8,11 @@ import {
   type FocusRule,
   type PlannedMinutes,
 } from "@/lib/focus/session";
+import type { PlantChoice } from "@/lib/grove/layout";
 
 type Props = {
   taskIds: string[];
-  onStart: (input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[] }) => void;
+  onStart: (input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[]; plant: PlantChoice | null }) => void;
 };
 
 const focusRing =
@@ -93,7 +94,7 @@ export function SessionSetup({ taskIds, onStart }: Props) {
 
       <button
         type="button"
-        onClick={() => onStart({ plannedMinutes: length, rule, taskIds })}
+        onClick={() => onStart({ plannedMinutes: length, rule, taskIds, plant: null })}
         disabled={taskIds.length === 0}
         className={`w-full min-h-[44px] py-2.5 bg-slate-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-semibold rounded-lg hover:bg-slate-700 dark:hover:bg-zinc-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`}
       >

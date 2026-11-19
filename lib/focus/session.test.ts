@@ -22,6 +22,7 @@ function base(over: Partial<SavedSession> = {}): SavedSession {
     ticks: [],
     hiddenAt: null,
     ended: null,
+    plant: null,
     ...over,
   };
 }

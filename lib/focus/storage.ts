@@ -1,3 +1,4 @@
+import { parsePlantChoice } from "@/lib/grove/layout";
 import { LENGTHS, type SavedSession } from "./session";
 
 export const STORAGE_KEY = "grove-focus-session";
@@ -84,6 +85,7 @@ function validate(v: unknown): SavedSession | null {
     ticks: (v.ticks as { taskId: string; at: number }[]).map((t) => ({ taskId: t.taskId, at: t.at })),
     hiddenAt: v.hiddenAt,
     ended,
+    plant: parsePlantChoice(v.plant),
   };
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { PlantChoice } from "@/lib/grove/layout";
 import {
   judge,
   segments,
@@ -15,7 +16,7 @@ export type FocusSessionApi = {
   session: SavedSession | null;
   now: number; // ticks about once a second while running
   wakeLockOk: boolean | null; // null = not requested; false = unsupported or refused
-  start(input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[] }): void;
+  start(input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[]; plant: PlantChoice | null }): void;
   tick(taskId: string): void; // records the tick; ends as CLEARED if it was the last
   giveUp(): void; // ends as GAVE_UP
   clear(): void; // forget an ended session
@@ -74,6 +75,7 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
           plannedMinutes: s.plannedMinutes,
           rule: s.rule,
           taskIds: s.taskIds,
+          plant: s.plant,
         }),
       });
       if (res.status >= 400 && res.status < 500 && !shouldRetry(res.status)) {
@@ -347,7 +349,7 @@ export function useFocusSession(): FocusSessionApi {
   }, [startedAt, sessionId, endedFlag, synced, sync]);
 
   const start = useCallback<FocusSessionApi["start"]>(
-    ({ plannedMinutes, rule, taskIds }) => {
+    ({ plannedMinutes, rule, taskIds, plant }) => {
       const cur = ref.current;
       if (cur && !cur.ended) return;
       if (taskIds.length === 0) return;
@@ -368,6 +370,7 @@ export function useFocusSession(): FocusSessionApi {
         ticks: [],
         hiddenAt: null,
         ended: null,
+        plant,
       });
     },
     [commit, flushPending],

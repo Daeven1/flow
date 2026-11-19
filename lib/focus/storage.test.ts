@@ -11,6 +11,7 @@ const valid: SavedSession = {
   ticks: [{ taskId: "a", at: 1_060_000 }],
   hiddenAt: null,
   ended: null,
+  plant: null,
 };
 
 test.each([[null], ["{"], ['{"startedAt":"x"}'], [""], ["[]"], ["null"]])(
@@ -32,6 +33,18 @@ test("parseSaved rejects an empty id and an empty task list", () => {
 });
 test("parseSaved round-trips a valid session", () => {
   expect(parseSaved(JSON.stringify(valid))).toEqual(valid);
+});
+test("parseSaved reads a piece-1 session with no plant key as plant null", () => {
+  const { plant: _p, ...old } = valid;
+  expect(parseSaved(JSON.stringify(old))).toEqual({ ...valid, plant: null });
+});
+test("parseSaved round-trips a valid plant", () => {
+  const planted = { ...valid, plant: { species: "WILDFLOWERS" as const, x: -1, y: -1 } };
+  expect(parseSaved(JSON.stringify(planted))).toEqual(planted);
+});
+test("parseSaved turns an invalid plant into null without rejecting the session", () => {
+  const bad = { ...valid, plant: { species: "OAK", x: 0, y: 0 } };
+  expect(parseSaved(JSON.stringify(bad))).toEqual({ ...valid, plant: null });
 });
 test("parseSaved round-trips an ended session", () => {
   const ended = { ...valid, id: null, hiddenAt: 5, ended: { outcome: "LEFT" as const, at: 9, synced: false } };

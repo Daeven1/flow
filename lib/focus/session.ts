@@ -1,3 +1,5 @@
+import type { PlantChoice } from "@/lib/grove/layout";
+
 // Pure timing and focus-rule logic for the Focus page. No React, Next or DOM.
 
 export type FocusRule = "STRICT" | "GENTLE";
@@ -14,6 +16,7 @@ export type SavedSession = {
   ticks: Tick[]; // tasks ticked off, in order
   hiddenAt: number | null; // when the page last became hidden, if still hidden
   ended: Ended | null;
+  plant: PlantChoice | null; // the plant this session grows, if one was chosen
 };
 export type Segment = { taskId: string; minutes: number };
 
