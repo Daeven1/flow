@@ -55,9 +55,11 @@ const PALETTE = {
     grass: 0x93c768,
     soil: 0x9a7149,
     soilDeep: 0x6f4f33,
-    // Fresh sprout greens: lighter and yellower than the adult leaves.
-    sprout: 0x9fd45a,
-    sproutStem: 0x8cc152,
+    // Sprout greens: deeper and more saturated than the grass (0x93c768) so
+    // the seed leaves stand out, with a pale fresh tip.
+    sprout: 0x3f9a3a,
+    sproutStem: 0x2f7d34,
+    sproutTip: 0xb5e38a,
   },
   dark: {
     // Deeper, more saturated greens; blooms kept bright against Midnight Navy.
@@ -70,8 +72,10 @@ const PALETTE = {
     grass: 0x5a8f3c,
     soil: 0x7a5636,
     soilDeep: 0x4d3522,
-    sprout: 0x8fd14a,
-    sproutStem: 0x7cb83f,
+    // Brighter than the dark grass (0x5a8f3c), like the dark adult leaves.
+    sprout: 0x4fc04a,
+    sproutStem: 0x2c7a30,
+    sproutTip: 0x9fe07a,
   },
 } as const;
 
@@ -155,34 +159,44 @@ function fitHeight(group: THREE.Group, body: THREE.Group, target: number) {
 //
 // It sits on the plant's outer group, outside the fitted body, so it is the
 // same world size for every species: about 0.26 tall and 0.34 across the
-// leaves at growth 0. The leaves perk up from about 20 degrees below
-// horizontal to 25 above (0-0.15). The sprout then waits until the species'
+// leaves at growth 0. The leaves sit about 12 degrees above horizontal, so
+// their faces show to the camera looking down, and perk up to 30 (0-0.15). The sprout then waits until the species'
 // own parts stand taller than it, and only then shrinks into the base, so
 // the plant never gets shorter as it grows. When that happens is measured
 // once per plant (`fitSprout`); it always starts at 0.3 or later and is over
 // by 0.65, after which the sprout is hidden and the grown plant is exactly
 // what it was. About 22 triangles.
 
-const SPROUT_HEIGHT = 0.24; // stem; the leaves add the last couple of centimetres
+const SPROUT_HEIGHT = 0.185; // stem; the raised leaves add the last few centimetres
 const SPROUT_LEAF = 0.18; // each leaf's reach from the stem
 const SPROUT_RADIUS = 0.022;
 const SPROUT_SHRINK_FROM = 0.3; // earliest start of the handover
 const SPROUT_GONE_BY = 0.65; // the adult look is untouched from here up
 const SPROUT_SHRINK_SPAN = 0.1;
 
+// A rounded seed leaf along +x, unit length, with a raised midrib. The last
+// bit of the tip is a separate two-triangle piece in a paler green.
+const COT = {
+  base: [0, 0, 0], tip: [1, 0.06, 0], m: [0.5, 0.09, 0], n: [0.84, 0.07, 0],
+  l1: [0.25, 0.02, -0.28], l2: [0.72, 0.05, -0.3],
+  r1: [0.25, 0.02, 0.28], r2: [0.72, 0.05, 0.3],
+};
+
 function cotyledonGeometry(tr: Tracker) {
-  // A rounded seed leaf along +x, unit length, with a raised midrib.
-  const base = [0, 0, 0], tip = [1, 0.06, 0], m = [0.5, 0.09, 0];
-  const l1 = [0.25, 0.02, -0.28], l2 = [0.72, 0.05, -0.3];
-  const r1 = [0.25, 0.02, 0.28], r2 = [0.72, 0.05, 0.3];
+  const { base, m, n, l1, l2, r1, r2 } = COT;
   return fromTriangles(tr, [
     ...base, ...m, ...l1,
     ...l1, ...m, ...l2,
-    ...l2, ...m, ...tip,
+    ...l2, ...m, ...n,
     ...base, ...r1, ...m,
     ...r1, ...r2, ...m,
-    ...r2, ...tip, ...m,
+    ...r2, ...n, ...m,
   ]);
+}
+
+function cotyledonTipGeometry(tr: Tracker) {
+  const { tip, n, l2, r2 } = COT;
+  return fromTriangles(tr, [...l2, ...n, ...tip, ...r2, ...tip, ...n]);
 }
 
 type Sprout = {
@@ -197,9 +211,11 @@ function buildSprout(tr: Tracker, parent: THREE.Group, seed: number, pal: (typeo
   const rand = mulberry32((seed ^ 0x51ed1e55) + 0x2f);
   const stemMat = material(tr, pal.sproutStem);
   const leafMat = material(tr, pal.sprout, { side: THREE.DoubleSide });
+  const tipMat = material(tr, pal.sproutTip, { side: THREE.DoubleSide });
   const shifts: ColourShift[] = [
     { mat: stemMat, healthy: new THREE.Color(pal.sproutStem), dried: STRAW },
     { mat: leafMat, healthy: new THREE.Color(pal.sprout), dried: STRAW },
+    { mat: tipMat, healthy: new THREE.Color(pal.sproutTip), dried: STRAW },
   ];
 
   const root = new THREE.Group();
@@ -213,14 +229,16 @@ function buildSprout(tr: Tracker, parent: THREE.Group, seed: number, pal: (typeo
   const top = new THREE.Group();
   root.add(top);
   const leafGeo = cotyledonGeometry(tr);
+  const tipGeo = cotyledonTipGeometry(tr);
   const leaves = [0, Math.PI].map((side) => {
     const holder = new THREE.Group();
     holder.rotation.order = "YXZ";
     holder.rotation.y = side + (rand() - 0.5) * 0.3;
     const mesh = new THREE.Mesh(leafGeo, leafMat);
+    mesh.add(new THREE.Mesh(tipGeo, tipMat)); // scales with the leaf
     holder.add(mesh);
     top.add(holder);
-    return { holder, mesh, jitter: (rand() - 0.5) * 0.16, size: SPROUT_LEAF * (0.94 + rand() * 0.12) };
+    return { holder, mesh, jitter: (rand() - 0.5) * 0.1, size: SPROUT_LEAF * (0.94 + rand() * 0.12) };
   });
 
   let shrinkFrom = SPROUT_GONE_BY - SPROUT_SHRINK_SPAN;
@@ -239,7 +257,7 @@ function buildSprout(tr: Tracker, parent: THREE.Group, seed: number, pal: (typeo
       stem.scale.set(r, tiny(h), r);
       top.position.y = h;
       for (const l of leaves) {
-        l.holder.rotation.z = lerp(-0.35, 0.44, perk) + l.jitter - w * 0.9;
+        l.holder.rotation.z = lerp(0.22, 0.52, perk) + l.jitter - w * 0.9;
         l.mesh.scale.setScalar(tiny(l.size * keep * (1 - 0.15 * w)));
       }
       applyColours(shifts, w);
