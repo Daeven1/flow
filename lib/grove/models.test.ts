@@ -4,16 +4,49 @@ import { SPECIES } from "./layout";
 import { buildPlant, fullHeight, spotToWorld, type PlantModel } from "./models";
 
 const height = (m: PlantModel) => new THREE.Box3().setFromObject(m.group).getSize(new THREE.Vector3()).y;
-test.each(SPECIES)("%s grows from almost nothing to its full height", (sp) => {
+test.each(SPECIES)("%s grows from a small sprout to its full height", (sp) => {
   const m = buildPlant(sp, 7, "light");
   m.setGrowth(0); const h0 = height(m);
   m.setGrowth(0.5); const h5 = height(m);
   m.setGrowth(1); const h1 = height(m);
-  expect(h0).toBeLessThan(0.1 * fullHeight(sp));
+  expect(h0).toBeGreaterThan(0.1 * fullHeight(sp));
+  expect(h0).toBeLessThan(0.3 * fullHeight(sp));
   expect(h5).toBeGreaterThan(h0);
   expect(h1).toBeGreaterThan(h5);
   expect(h1).toBeGreaterThan(0.8 * fullHeight(sp));
   expect(h1).toBeLessThan(1.2 * fullHeight(sp));
+});
+test.each(SPECIES)("%s is visible from the first second", (sp) => {
+  for (const seed of [1, 7, 11, 42]) {
+    const m = buildPlant(sp, seed, "light"); m.setGrowth(0);
+    const size = new THREE.Box3().setFromObject(m.group).getSize(new THREE.Vector3());
+    expect(Math.max(size.x, size.z)).toBeGreaterThanOrEqual(0.12);
+  }
+});
+// Recorded from the plants as they were before the sprout was added.
+const GROWN_BOX = {
+  WILDFLOWERS: { min: [-0.36138, -0.0066, -0.34713], max: [0.34525, 0.67358, 0.32133] },
+  FERN: { min: [-0.33818, -0.00539, -0.30406], max: [0.37334, 0.60907, 0.34757] },
+} as const;
+test.each(SPECIES)("%s looks the same fully grown as before the sprout", (sp) => {
+  const m = buildPlant(sp, 11, "light"); m.setGrowth(1);
+  const box = new THREE.Box3().setFromObject(m.group);
+  const want = new THREE.Box3(new THREE.Vector3(...GROWN_BOX[sp].min), new THREE.Vector3(...GROWN_BOX[sp].max));
+  const size = want.getSize(new THREE.Vector3()).toArray();
+  box.min.toArray().forEach((v, i) => expect(Math.abs(v - want.min.getComponent(i))).toBeLessThanOrEqual(0.01 * size[i]));
+  box.max.toArray().forEach((v, i) => expect(Math.abs(v - want.max.getComponent(i))).toBeLessThanOrEqual(0.01 * size[i]));
+});
+test.each(SPECIES)("%s stays under its triangle budget", (sp) => {
+  for (const seed of [1, 7, 11, 42, 99]) {
+    let tris = 0;
+    buildPlant(sp, seed, "light").group.traverse((o) => { const g = (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry;
+      if (g) tris += (g.index ? g.index.count : g.attributes.position.count) / 3; });
+    expect(tris).toBeLessThan(400);
+  }
+});
+test("a sprout lost in its first minutes withers too", () => {
+  const m = buildPlant("WILDFLOWERS", 3, "light"); m.setGrowth(0.1); const up = height(m);
+  m.setWithered(1); expect(height(m)).toBeLessThan(up);
 });
 test("the same seed makes the same plant, another seed a different one", () => {
   const count = (seed: number) => { let n = 0; const m = buildPlant("WILDFLOWERS", seed, "light"); m.setGrowth(1);

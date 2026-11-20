@@ -55,6 +55,9 @@ const PALETTE = {
     grass: 0x93c768,
     soil: 0x9a7149,
     soilDeep: 0x6f4f33,
+    // Fresh sprout greens: lighter and yellower than the adult leaves.
+    sprout: 0x9fd45a,
+    sproutStem: 0x8cc152,
   },
   dark: {
     // Deeper, more saturated greens; blooms kept bright against Midnight Navy.
@@ -67,6 +70,8 @@ const PALETTE = {
     grass: 0x5a8f3c,
     soil: 0x7a5636,
     soilDeep: 0x4d3522,
+    sprout: 0x8fd14a,
+    sproutStem: 0x7cb83f,
   },
 } as const;
 
@@ -145,11 +150,94 @@ function fitHeight(group: THREE.Group, body: THREE.Group, target: number) {
 }
 
 // ---------------------------------------------------------------------------
+// Sprout: every plant starts as a short faceted stem with two seed leaves
+// (cotyledons), so a session is visibly alive from its first second.
+//
+// It sits on the plant's outer group, outside the fitted body, so it is the
+// same world size for every species: about 0.14 tall and 0.18 across the
+// leaves at growth 0. The leaves perk up from about 20 degrees below
+// horizontal to 25 above (0-0.15), then the whole sprout shrinks into the
+// base (0.3-0.5) as the species' own parts take over; from 0.5 it is hidden,
+// so the grown plant is exactly what it was. About 22 triangles.
+
+const SPROUT_HEIGHT = 0.13; // stem; the leaves add the last centimetre
+const SPROUT_LEAF = 0.095; // each leaf's reach from the stem
+const SPROUT_RADIUS = 0.012;
+
+function cotyledonGeometry(tr: Tracker) {
+  // A rounded seed leaf along +x, unit length, with a raised midrib.
+  const base = [0, 0, 0], tip = [1, 0.06, 0], m = [0.5, 0.09, 0];
+  const l1 = [0.25, 0.02, -0.28], l2 = [0.72, 0.05, -0.3];
+  const r1 = [0.25, 0.02, 0.28], r2 = [0.72, 0.05, 0.3];
+  return fromTriangles(tr, [
+    ...base, ...m, ...l1,
+    ...l1, ...m, ...l2,
+    ...l2, ...m, ...tip,
+    ...base, ...r1, ...m,
+    ...r1, ...r2, ...m,
+    ...r2, ...tip, ...m,
+  ]);
+}
+
+type Sprout = { apply(growth: number, w: number): void };
+
+function buildSprout(tr: Tracker, parent: THREE.Group, seed: number, pal: (typeof PALETTE)[Theme]): Sprout {
+  // Its own random stream, so the species' draws (and shapes) are unchanged.
+  const rand = mulberry32((seed ^ 0x51ed1e55) + 0x2f);
+  const stemMat = material(tr, pal.sproutStem);
+  const leafMat = material(tr, pal.sprout, { side: THREE.DoubleSide });
+  const shifts: ColourShift[] = [
+    { mat: stemMat, healthy: new THREE.Color(pal.sproutStem), dried: STRAW },
+    { mat: leafMat, healthy: new THREE.Color(pal.sprout), dried: STRAW },
+  ];
+
+  const root = new THREE.Group();
+  root.name = "sprout";
+  root.rotation.order = "YXZ";
+  root.rotation.y = rand() * Math.PI * 2;
+  parent.add(root);
+  const tilt = (rand() - 0.5) * 0.24; // a slight per-seed lean
+  const stem = new THREE.Mesh(prismGeometry(tr, 5, 0.7), stemMat);
+  root.add(stem);
+  const top = new THREE.Group();
+  root.add(top);
+  const leafGeo = cotyledonGeometry(tr);
+  const leaves = [0, Math.PI].map((side) => {
+    const holder = new THREE.Group();
+    holder.rotation.order = "YXZ";
+    holder.rotation.y = side + (rand() - 0.5) * 0.3;
+    const mesh = new THREE.Mesh(leafGeo, leafMat);
+    holder.add(mesh);
+    top.add(holder);
+    return { holder, mesh, jitter: (rand() - 0.5) * 0.16, size: SPROUT_LEAF * (0.94 + rand() * 0.12) };
+  });
+
+  return {
+    apply(growth, w) {
+      const perk = stage(growth, 0, 0.15);
+      const keep = 1 - stage(growth, 0.3, 0.5);
+      root.visible = keep > 0;
+      // Withered sprouts lean over and their leaves hang.
+      root.rotation.z = tilt - w * 0.45;
+      const h = SPROUT_HEIGHT * keep * (1 - 0.15 * w);
+      const r = SPROUT_RADIUS * (0.5 + 0.5 * keep);
+      stem.scale.set(r, tiny(h), r);
+      top.position.y = h;
+      for (const l of leaves) {
+        l.holder.rotation.z = lerp(-0.35, 0.44, perk) + l.jitter - w * 0.9;
+        l.mesh.scale.setScalar(tiny(l.size * keep * (1 - 0.15 * w)));
+      }
+      applyColours(shifts, w);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Wildflowers: a rosette of broad basal leaves with 3-5 stems rising out of
 // it, each ending in a faceted five-petal head.
 //
 // Each stem is two tapered prisms joined at a knee so it can arch and droop.
-// Basal leaves unfold first (t 0-0.45), stems rise (0.15-0.65), stem leaves
+// The sprout comes first (0-0.5); basal leaves unfold (t 0.1-0.45), stems rise (0.15-0.65), stem leaves
 // open (0.35-0.8), blooms open last (0.65-1).
 
 function bloomGeometry(tr: Tracker) {
@@ -195,6 +283,7 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
   group.name = "wildflowers";
   const body = new THREE.Group();
   group.add(body);
+  const sprout = buildSprout(tr, group, seed, pal);
 
   // Shared within the plant.
   const stalkGeo = prismGeometry(tr, 5, 0.6);
@@ -298,7 +387,7 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
   let growth = 1;
   let withered = 0;
   const apply = () => {
-    const leafOpen = stage(growth, 0, 0.45);
+    const leafOpen = stage(growth, 0.1, 0.45);
     const rise = stage(growth, 0.15, 0.65);
     const unfold = stage(growth, 0.35, 0.8);
     const open = stage(growth, 0.65, 1);
@@ -325,6 +414,7 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
       s.leaf.mesh.scale.setScalar(tiny(s.leaf.size * unfold * (1 - 0.25 * w)));
     }
     applyColours(shifts, w);
+    sprout.apply(growth, w);
   };
 
   apply();
@@ -344,7 +434,7 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
 //
 // Each frond is a chain of segments; each joint bends a little so the frond
 // arches. While young the joints are curled tight like a fiddlehead and
-// uncurl as the frond unfolds. Fronds rise first (0-0.5), leaflets unfold
+// uncurl as the frond unfolds. After the sprout (0-0.5), fronds rise (0.1-0.5), leaflets unfold
 // from the base outwards (0.3-0.8), and the tip opens last (0.7-1).
 
 const FROND_SEGMENTS = 4;
@@ -370,6 +460,7 @@ function buildFern(seed: number, theme: Theme): PlantModel {
   group.name = "fern";
   const body = new THREE.Group();
   group.add(body);
+  const sprout = buildSprout(tr, group, seed, pal);
 
   const rachisGeo = prismGeometry(tr, 3, 0.55);
   const leafletGeo = leafletGeometry(tr);
@@ -434,7 +525,7 @@ function buildFern(seed: number, theme: Theme): PlantModel {
   let growth = 1;
   let withered = 0;
   const apply = () => {
-    const rise = stage(growth, 0, 0.5);
+    const rise = stage(growth, 0.1, 0.5);
     const tipOpen = stage(growth, 0.7, 1);
     const w = withered;
     const rad = 0.014 * (0.5 + 0.5 * rise);
@@ -465,6 +556,7 @@ function buildFern(seed: number, theme: Theme): PlantModel {
       f.tip.scale.set(t, t, t * 1.4);
     }
     applyColours(shifts, w);
+    sprout.apply(growth, w);
   };
 
   apply();
