@@ -9,8 +9,8 @@ test.each(SPECIES)("%s grows from a small sprout to its full height", (sp) => {
   m.setGrowth(0); const h0 = height(m);
   m.setGrowth(0.5); const h5 = height(m);
   m.setGrowth(1); const h1 = height(m);
-  expect(h0).toBeGreaterThan(0.1 * fullHeight(sp));
-  expect(h0).toBeLessThan(0.3 * fullHeight(sp));
+  expect(h0).toBeGreaterThan(0.3 * fullHeight(sp));
+  expect(h0).toBeLessThan(0.45 * fullHeight(sp));
   expect(h5).toBeGreaterThan(h0);
   expect(h1).toBeGreaterThan(h5);
   expect(h1).toBeGreaterThan(0.8 * fullHeight(sp));
@@ -20,7 +20,17 @@ test.each(SPECIES)("%s is visible from the first second", (sp) => {
   for (const seed of [1, 7, 11, 42]) {
     const m = buildPlant(sp, seed, "light"); m.setGrowth(0);
     const size = new THREE.Box3().setFromObject(m.group).getSize(new THREE.Vector3());
-    expect(Math.max(size.x, size.z)).toBeGreaterThanOrEqual(0.12);
+    expect(Math.max(size.x, size.z)).toBeGreaterThanOrEqual(0.28);
+  }
+});
+test.each(SPECIES)("%s never gets shorter as it grows", (sp) => {
+  for (let seed = 1; seed <= 20; seed++) {
+    const m = buildPlant(sp, seed, "light"); let prev = 0;
+    for (let k = 0; k <= 20; k++) {
+      m.setGrowth(k / 20); const h = height(m);
+      expect(h, `seed ${seed} growth ${k / 20}`).toBeGreaterThanOrEqual(prev - 0.002);
+      prev = h;
+    }
   }
 });
 // Recorded from the plants as they were before the sprout was added.

@@ -154,15 +154,21 @@ function fitHeight(group: THREE.Group, body: THREE.Group, target: number) {
 // (cotyledons), so a session is visibly alive from its first second.
 //
 // It sits on the plant's outer group, outside the fitted body, so it is the
-// same world size for every species: about 0.14 tall and 0.18 across the
+// same world size for every species: about 0.26 tall and 0.34 across the
 // leaves at growth 0. The leaves perk up from about 20 degrees below
-// horizontal to 25 above (0-0.15), then the whole sprout shrinks into the
-// base (0.3-0.5) as the species' own parts take over; from 0.5 it is hidden,
-// so the grown plant is exactly what it was. About 22 triangles.
+// horizontal to 25 above (0-0.15). The sprout then waits until the species'
+// own parts stand taller than it, and only then shrinks into the base, so
+// the plant never gets shorter as it grows. When that happens is measured
+// once per plant (`fitSprout`); it always starts at 0.3 or later and is over
+// by 0.65, after which the sprout is hidden and the grown plant is exactly
+// what it was. About 22 triangles.
 
-const SPROUT_HEIGHT = 0.13; // stem; the leaves add the last centimetre
-const SPROUT_LEAF = 0.095; // each leaf's reach from the stem
-const SPROUT_RADIUS = 0.012;
+const SPROUT_HEIGHT = 0.24; // stem; the leaves add the last couple of centimetres
+const SPROUT_LEAF = 0.18; // each leaf's reach from the stem
+const SPROUT_RADIUS = 0.022;
+const SPROUT_SHRINK_FROM = 0.3; // earliest start of the handover
+const SPROUT_GONE_BY = 0.65; // the adult look is untouched from here up
+const SPROUT_SHRINK_SPAN = 0.1;
 
 function cotyledonGeometry(tr: Tracker) {
   // A rounded seed leaf along +x, unit length, with a raised midrib.
@@ -179,7 +185,12 @@ function cotyledonGeometry(tr: Tracker) {
   ]);
 }
 
-type Sprout = { apply(growth: number, w: number): void };
+type Sprout = {
+  root: THREE.Group;
+  apply(growth: number, w: number): void;
+  /** Sets the growth range over which the sprout shrinks away. */
+  setHandover(from: number, to: number): void;
+};
 
 function buildSprout(tr: Tracker, parent: THREE.Group, seed: number, pal: (typeof PALETTE)[Theme]): Sprout {
   // Its own random stream, so the species' draws (and shapes) are unchanged.
@@ -212,10 +223,14 @@ function buildSprout(tr: Tracker, parent: THREE.Group, seed: number, pal: (typeo
     return { holder, mesh, jitter: (rand() - 0.5) * 0.16, size: SPROUT_LEAF * (0.94 + rand() * 0.12) };
   });
 
+  let shrinkFrom = SPROUT_GONE_BY - SPROUT_SHRINK_SPAN;
+  let shrinkTo = SPROUT_GONE_BY;
   return {
+    root,
+    setHandover(from, to) { shrinkFrom = from; shrinkTo = to; },
     apply(growth, w) {
       const perk = stage(growth, 0, 0.15);
-      const keep = 1 - stage(growth, 0.3, 0.5);
+      const keep = 1 - stage(growth, shrinkFrom, shrinkTo);
       root.visible = keep > 0;
       // Withered sprouts lean over and their leaves hang.
       root.rotation.z = tilt - w * 0.45;
@@ -232,13 +247,36 @@ function buildSprout(tr: Tracker, parent: THREE.Group, seed: number, pal: (typeo
   };
 }
 
+/**
+ * Picks the sprout's handover for this plant: the first growth (from 0.3)
+ * at which the species' own parts stand at least as tall as the perked-up
+ * sprout. From then on the sprout only shrinks below the rest of the plant,
+ * so overall height never drops. Runs once at build time, after the body is
+ * fitted; it leaves the plant fully grown and healthy, like `fitHeight`.
+ */
+function fitSprout(body: THREE.Group, sprout: Sprout, apply: (g: number) => void) {
+  const box = new THREE.Box3();
+  apply(0.15);
+  const sproutTop = box.setFromObject(sprout.root).max.y;
+  // A late handover gets a shorter shrink so it still ends by SPROUT_GONE_BY.
+  const latest = SPROUT_GONE_BY - 0.02;
+  let from = latest;
+  for (let g = SPROUT_SHRINK_FROM; g < latest; g += 0.01) {
+    apply(g);
+    if (box.setFromObject(body).max.y >= sproutTop) { from = g; break; }
+  }
+  sprout.setHandover(from, Math.min(SPROUT_GONE_BY, from + SPROUT_SHRINK_SPAN));
+  apply(1);
+}
+
 // ---------------------------------------------------------------------------
 // Wildflowers: a rosette of broad basal leaves with 3-5 stems rising out of
 // it, each ending in a faceted five-petal head.
 //
 // Each stem is two tapered prisms joined at a knee so it can arch and droop.
-// The sprout comes first (0-0.5); basal leaves unfold (t 0.1-0.45), stems rise (0.15-0.65), stem leaves
-// open (0.35-0.8), blooms open last (0.65-1).
+// The sprout comes first (gone by 0.65 at the latest); basal leaves unfold
+// (t 0.1-0.45), stems rise (0.15-0.65), stem leaves open (0.35-0.8), blooms
+// open last (0.65-1).
 
 function bloomGeometry(tr: Tracker) {
   // Five flattened petal wedges round a raised centre, over a shallow cone,
@@ -419,6 +457,7 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
 
   apply();
   fitHeight(group, body, fullHeight("WILDFLOWERS") * (0.92 + rand() * 0.14));
+  fitSprout(body, sprout, (g) => { growth = g; apply(); });
 
   return {
     group,
@@ -434,7 +473,7 @@ function buildWildflowers(seed: number, theme: Theme): PlantModel {
 //
 // Each frond is a chain of segments; each joint bends a little so the frond
 // arches. While young the joints are curled tight like a fiddlehead and
-// uncurl as the frond unfolds. After the sprout (0-0.5), fronds rise (0.1-0.5), leaflets unfold
+// uncurl as the frond unfolds. After the sprout, fronds rise (0.1-0.5), leaflets unfold
 // from the base outwards (0.3-0.8), and the tip opens last (0.7-1).
 
 const FROND_SEGMENTS = 4;
@@ -561,6 +600,7 @@ function buildFern(seed: number, theme: Theme): PlantModel {
 
   apply();
   fitHeight(group, body, fullHeight("FERN") * (0.92 + rand() * 0.14));
+  fitSprout(body, sprout, (g) => { growth = g; apply(); });
 
   return {
     group,
