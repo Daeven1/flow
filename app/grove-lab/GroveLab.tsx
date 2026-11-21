@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Grove, type Growing } from "@/components/grove/Grove";
-import { defaultSpot, freeSpots, gridSize, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
+import { MAX_STAGE, SPECIES, canTend, defaultSpot, freeSpots, gridSize, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
 import type { Outcome } from "@/lib/focus/session";
 
 const focusRing =
@@ -21,37 +21,55 @@ const labelClass = "text-[10px] font-semibold uppercase tracking-widest text-sla
 /**
  * Kept plants placed the way real planting fills the grove (each on the
  * default spot of the grid it was planted into), so widening the grid can be
- * checked against earlier plants staying put. Species alternate; every
- * seventh plant is withered.
+ * checked against earlier plants staying put. Wildflowers and ferns
+ * alternate; every fourth plant (from the third) is a tree, cycling through
+ * stages 1, 2, 3; the fifth and twelfth are berry bushes. Every seventh plant
+ * (from the sixth) is withered, and a withered tree is always a sapling.
  */
 function labPlants(count: number): GrovePlant[] {
   const out: GrovePlant[] = [];
+  let trees = 0;
   for (let i = 0; i < count; i++) {
     const spot = defaultSpot(gridSize(i + 1), out)!;
+    const withered = i % 7 === 5;
+    const species: Species =
+      i % 4 === 2 ? "TREE" : i === 4 || i === 11 ? "BERRY_BUSH" : i % 2 === 0 ? "WILDFLOWERS" : "FERN";
+    const stage = species === "TREE" ? (withered ? 1 : (trees % MAX_STAGE) + 1) : 1;
+    if (species === "TREE") trees++;
     out.push({
       id: `lab-${i}`,
-      species: i % 2 === 0 ? "WILDFLOWERS" : "FERN",
+      species,
       x: spot.x,
       y: spot.y,
-      status: i % 7 === 6 ? "WITHERED" : "ALIVE",
+      status: withered ? "WITHERED" : "ALIVE",
       plantedAt: "2026-11-01T08:00:00.000Z",
-      witheredAt: i % 7 === 6 ? "2026-11-01T08:30:00.000Z" : null,
-      stage: 1,
+      witheredAt: withered ? "2026-11-01T08:30:00.000Z" : null,
+      stage,
     });
   }
   return out;
 }
 
+const SPECIES_LABEL: Record<Species, string> = {
+  WILDFLOWERS: "Wildflowers", FERN: "Fern", BERRY_BUSH: "Berry bush", TREE: "Tree",
+};
+
 const OUTCOMES: { label: string; value: Outcome | null }[] = [
   { label: "None", value: null },
   { label: "Completed", value: "COMPLETED" },
   { label: "Gave up", value: "GAVE_UP" },
+  { label: "Left", value: "LEFT" },
 ];
 
 export default function GroveLab() {
   const [count, setCount] = useState(12);
   const [growth, setGrowth] = useState(50);
   const [species, setSpecies] = useState<Species>("WILDFLOWERS");
+  const [stage, setStage] = useState(1);
+  // Tend: the growing plant is a tend of a lab tree (the chosen one, else the first that can be tended).
+  const [tend, setTend] = useState(false);
+  const [tendable, setTendable] = useState(false);
+  const [pickedTree, setPickedTree] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [showGrowing, setShowGrowing] = useState(true);
   const [pickable, setPickable] = useState(false);
@@ -75,14 +93,28 @@ export default function GroveLab() {
     return defaultSpot(n, plants);
   }, [picked, n, plants]);
 
-  const growing = useMemo<Growing | null>(
-    // While picking there is no session yet, so no growing plant: that also
-    // keeps the selected-spot marker visible.
-    () => (showGrowing && !pickable && spot ? { species, spot, progress: growth / 100, outcome } : null),
-    [showGrowing, pickable, spot, species, growth, outcome],
+  const tendTree = useMemo(
+    () => plants.find((p) => p.id === pickedTree && canTend(p)) ?? plants.find(canTend) ?? null,
+    [plants, pickedTree],
   );
 
-  const total = count + (growing ? 1 : 0);
+  const growing = useMemo<Growing | null>(() => {
+    // While picking there is no session yet, so no growing plant: that also
+    // keeps the selected-spot marker visible.
+    if (!showGrowing || pickable || tendable) return null;
+    if (tend) {
+      if (!tendTree) return null;
+      return {
+        species: "TREE", spot: { x: tendTree.x, y: tendTree.y }, stage: tendTree.stage + 1,
+        progress: growth / 100, outcome, tendId: tendTree.id,
+      };
+    }
+    if (!spot) return null;
+    return { species, spot, stage: species === "TREE" ? stage : 1, progress: growth / 100, outcome };
+  }, [showGrowing, pickable, tendable, tend, tendTree, spot, species, stage, growth, outcome]);
+
+  const total = count + (growing && !growing.tendId ? 1 : 0);
+
   const label = `Grove lab: ${total} ${total === 1 ? "plant" : "plants"}`;
 
   return (
@@ -101,6 +133,9 @@ export default function GroveLab() {
         pickable={pickable}
         selectedSpot={spot}
         onPickSpot={setPicked}
+        tendable={tendable}
+        selectedTreeId={tendTree?.id ?? null}
+        onPickTree={setPickedTree}
         label={label}
         className="w-full h-[min(60vh,520px)]"
         fallback={
@@ -124,17 +159,29 @@ export default function GroveLab() {
 
         <div>
           <div id="lab-species" className={labelClass}>Species</div>
-          <div role="group" aria-labelledby="lab-species" className="flex gap-2">
-            {(["WILDFLOWERS", "FERN"] as const).map((s) => (
+          <div role="group" aria-labelledby="lab-species" className="flex flex-wrap gap-2">
+            {SPECIES.map((s) => (
               <button key={s} type="button" aria-pressed={species === s} onClick={() => setSpecies(s)} className={choiceClass(species === s)}>
-                {s === "FERN" ? "Fern" : "Wildflowers"}
+                {SPECIES_LABEL[s]}
               </button>
             ))}
           </div>
+          {species === "TREE" && (
+            <>
+              <div id="lab-stage" className={labelClass + " mt-3"}>Tree stage (grows into)</div>
+              <div role="group" aria-labelledby="lab-stage" className="flex gap-2">
+                {[1, 2, 3].map((s) => (
+                  <button key={s} type="button" aria-pressed={stage === s} onClick={() => setStage(s)} className={choiceClass(stage === s)}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
         <div>
           <div id="lab-outcome" className={labelClass}>Outcome</div>
-          <div role="group" aria-labelledby="lab-outcome" className="flex gap-2">
+          <div role="group" aria-labelledby="lab-outcome" className="flex flex-wrap gap-2">
             {OUTCOMES.map((o) => (
               <button key={o.label} type="button" aria-pressed={outcome === o.value} onClick={() => setOutcome(o.value)} className={choiceClass(outcome === o.value)}>
                 {o.label}
@@ -147,8 +194,14 @@ export default function GroveLab() {
           <button type="button" aria-pressed={showGrowing} onClick={() => setShowGrowing((v) => !v)} className={choiceClass(showGrowing)}>
             Growing plant
           </button>
+          <button type="button" aria-pressed={tend} onClick={() => setTend((v) => !v)} className={choiceClass(tend)}>
+            Tend
+          </button>
           <button type="button" aria-pressed={pickable} onClick={() => setPickable((v) => !v)} className={choiceClass(pickable)}>
             Pickable
+          </button>
+          <button type="button" aria-pressed={tendable} onClick={() => setTendable((v) => !v)} className={choiceClass(tendable)}>
+            Tendable
           </button>
           <button type="button" aria-pressed={dark} onClick={toggleDark} className={choiceClass(dark)}>
             Dark theme
@@ -158,7 +211,8 @@ export default function GroveLab() {
           </button>
         </div>
         <p className="text-sm text-slate-600 dark:text-zinc-400 sm:col-span-2">
-          Grid {n} × {n}. Selected spot: {spot ? `${spot.x}, ${spot.y}` : "none"}.
+          Grid {n} × {n}. Selected spot: {spot ? `${spot.x}, ${spot.y}` : "none"}. Tree to tend:{" "}
+          {tendTree ? `${tendTree.id} (stage ${tendTree.stage} at ${tendTree.x}, ${tendTree.y})` : "none"}.
         </p>
       </div>
     </div>

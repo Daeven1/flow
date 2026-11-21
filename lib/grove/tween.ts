@@ -14,14 +14,20 @@ export function approach(current: number, target: number, dtMs: number, halfLife
 /** How grown a withered plant is drawn: the same small size on every screen. */
 export const WITHERED_GROWTH = 0.35;
 
-/** What the growing plant should show for its progress and outcome. */
-export function shownGrowth(growing: { progress: number; outcome: Outcome | null }): { growth: number; withered: number } {
+/**
+ * What the growing plant should show for its progress and outcome. A tend
+ * (`tend: true`, a tree growing into its next stage) is never lost by
+ * withering: given up or left, it goes back to growth 0, which is the tree's
+ * old stage at full size.
+ */
+export function shownGrowth(growing: { progress: number; outcome: Outcome | null; tend?: boolean }): { growth: number; withered: number } {
   switch (growing.outcome) {
     case "COMPLETED":
     case "CLEARED":
       return { growth: 1, withered: 0 };
     case "GAVE_UP":
     case "LEFT":
+      if (growing.tend) return { growth: 0, withered: 0 };
       return { growth: Math.min(growing.progress, WITHERED_GROWTH), withered: 1 };
     default:
       return { growth: growing.progress, withered: 0 };

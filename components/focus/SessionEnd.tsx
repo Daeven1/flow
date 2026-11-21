@@ -63,6 +63,7 @@ export function SessionEnd({ session, plants, onNew }: Props) {
     ? {
         species: plant.species,
         spot: { x: plant.x, y: plant.y },
+        stage: 1, // tends are wired in task 6
         progress: progress(session, ended.at),
         outcome: ended.outcome,
       }

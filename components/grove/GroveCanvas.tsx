@@ -10,12 +10,20 @@
  */
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { freeSpots, gridSize, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
+import { canTend, freeSpots, gridSize, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
 import { MAX_PLANT_HEIGHT, buildIsland, buildPlant, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
 import { WITHERED_GROWTH, approach, shownGrowth } from "@/lib/grove/tween";
 import type { Outcome } from "@/lib/focus/session";
 
-export type Growing = { species: Species; spot: Spot; progress: number; outcome: Outcome | null };
+/**
+ * The plant a session is growing. `stage` is the stage it grows into (1 for a
+ * new plant). A tend sets `tendId` to the saved tree it grows: that tree's
+ * resting copy is hidden while this one stands in for it.
+ */
+export type Growing = {
+  species: Species; spot: Spot; stage: number; progress: number; outcome: Outcome | null;
+  tendId?: string;
+};
 
 export type GroveCanvasProps = {
   plants: GrovePlant[];
@@ -23,6 +31,10 @@ export type GroveCanvasProps = {
   pickable?: boolean;
   selectedSpot?: Spot | null;
   onPickSpot?: (spot: Spot) => void;
+  // Rings the trees that can be tended and lets one be chosen. Wins over pickable.
+  tendable?: boolean;
+  selectedTreeId?: string | null;
+  onPickTree?: (plantId: string) => void;
   label: string;
   onFail: () => void;
 };
@@ -40,7 +52,9 @@ const START_YAW = -Math.PI / 10;
 // Tallest a plant can reach: the tallest species, its +6 % seeded size
 // variation, the kept-outcome bounce and a little sway.
 const PLANT_TOP = MAX_PLANT_HEIGHT * 1.06 * (1 + 0.08) + 0.03;
-const PLANT_REACH = 0.42; // how far a full plant spreads from its spot centre
+// How far a full plant spreads from its spot centre: a mature tree's crown
+// (about 1.1 across, times its seeded size) plus the kept-outcome bounce.
+const PLANT_REACH = 0.72;
 const GROWTH_HALF_LIFE = 600; // ms
 const DROOP_MS = 1500;
 const BOUNCE_MS = 400;
@@ -65,11 +79,15 @@ const DISC: Record<Theme, { colour: number; opacity: number }> = {
   light: { colour: 0xe4f7c8, opacity: 0.3 },
   dark: { colour: 0xb9e6a0, opacity: 0.16 },
 };
-// The selected spot: a soft warm-yellow ring under the seedling.
+// The selected spot: a soft warm-yellow ring under the seedling. Trees that
+// can be tended get the same colour, softer, in a ring wide enough to show
+// around the trunk; the chosen tree gets the marker's ring at full strength.
 const SELECTED_RING: Record<Theme, { colour: number; opacity: number }> = {
   light: { colour: 0xffd34d, opacity: 0.8 },
   dark: { colour: 0xffcf4a, opacity: 0.65 },
 };
+const TEND_RING_SOFTNESS = 0.55; // times SELECTED_RING opacity
+const TREE_RING_SCALE = 1.4; // marker ring under a chosen tree: 0.24-0.38
 const SPROUT: Record<Theme, { stem: number; leaf: number }> = {
   light: { stem: 0x5a8c38, leaf: 0x7cc04c },
   dark: { stem: 0x55a33a, leaf: 0x74d052 },
@@ -105,12 +123,12 @@ function swayFor(seed: number, withered: boolean): Omit<Swayer, "holder"> {
 }
 
 type KeptEntry = {
-  id: string; species: Species; x: number; y: number; status: GrovePlant["status"];
+  id: string; species: Species; x: number; y: number; stage: number; status: GrovePlant["status"];
   model: PlantModel; sway: Swayer;
 };
 
 type GrowingEntry = {
-  key: string; spot: Spot; species: Species;
+  key: string; seed: number; spot: Spot; species: Species; stage: number; tend: boolean;
   model: PlantModel; sway: Swayer;
   progress: number; outcome: Outcome | null;
   growth: number; growthTarget: number;
@@ -159,6 +177,11 @@ function buildMarker() {
   group.visible = false;
   return {
     group,
+    /** "seed": the seedling in its ring, on a free spot. "tree": only a wider ring, around a chosen tree. */
+    setMode(mode: "seed" | "tree") {
+      seedling.visible = mode === "seed";
+      ring.scale.setScalar(mode === "tree" ? TREE_RING_SCALE : 1);
+    },
     setTheme(theme: Theme) {
       stemMat.color.setHex(SPROUT[theme].stem);
       leafMat.color.setHex(SPROUT[theme].leaf);
@@ -175,9 +198,17 @@ function buildMarker() {
 // ---------------------------------------------------------------------------
 // Engine
 
-type SyncInput = Pick<GroveCanvasProps, "plants" | "growing" | "pickable" | "selectedSpot">;
+type SyncInput = Pick<GroveCanvasProps, "plants" | "growing" | "pickable" | "selectedSpot" | "tendable" | "selectedTreeId">;
 
-function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spot) => void) {
+/** Growing plants are keyed by what they grow into; a tree keeps its seed (its look) across stages. */
+const plantSeed = (species: Species, s: Spot) => hash(`${species}:${s.x},${s.y}`);
+/** A saved plant drawn at rest: full size for its stage, or the withered size (only a sapling withers). */
+const restingGrowth = (p: { species: Species; stage: number; status: GrovePlant["status"] }) =>
+  p.status === "WITHERED" && !(p.species === "TREE" && p.stage > 1) ? WITHERED_GROWTH : 1;
+
+type Picks = { spot: (s: Spot) => void; tree: (id: string) => void };
+
+function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: Picks) {
   // Throws when WebGL is unavailable; the caller turns that into onFail.
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "low-power" });
   try {
@@ -191,7 +222,7 @@ function createEngine(wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spo
   }
 }
 
-function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFail: () => void, pick: (s: Spot) => void) {
+function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFail: () => void, pick: Picks) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(0x000000, 0);
   const canvas = renderer.domElement;
@@ -234,6 +265,13 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
   const marker = buildMarker();
   spotLayer.add(marker.group);
   let free = new Set<string>();
+  // Rings around the trees that can be tended (tendable mode), by plant id;
+  // all share one geometry and material.
+  const tendGeo = new THREE.RingGeometry(0.28, 0.38, 28);
+  tendGeo.rotateX(-Math.PI / 2);
+  const tendMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
+  const tendRings = new Map<string, THREE.Mesh>();
+  let tendIds = new Set<string>(); // saved trees that can be tended right now
 
   let yaw = START_YAW;
   let yawTarget = yaw;
@@ -248,6 +286,8 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
     sun.intensity = l.sun;
     discMat.color.setHex(DISC[theme].colour);
     discMat.opacity = DISC[theme].opacity;
+    tendMat.color.setHex(SELECTED_RING[theme].colour);
+    tendMat.opacity = SELECTED_RING[theme].opacity * TEND_RING_SOFTNESS;
     marker.setTheme(theme);
   }
 
@@ -392,10 +432,11 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
     input = next;
     const g = next.growing ?? null;
     const growingKey = g ? spotKey(g.spot) : null;
-    // A kept plant on the growing plant's spot (the end screen) is drawn once, as `growing`.
-    const plants = next.plants.filter((p) => spotKey(p) !== growingKey);
+    // A kept plant on the growing plant's spot (the end screen), or the tree a
+    // tend is growing, is drawn once, as `growing`.
+    const plants = next.plants.filter((p) => spotKey(p) !== growingKey && !(g?.tendId && p.id === g.tendId));
 
-    const count = plants.length + (g || next.pickable ? 1 : 0);
+    const count = plants.length + (g || (next.pickable && !next.tendable) ? 1 : 0);
     const wantN = gridSize(count);
     if (wantN !== n || rebuildAll || !island) {
       const changed = wantN !== n;
@@ -412,7 +453,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
         const old = growing;
         plantLayer.remove(old.sway.holder);
         old.model.dispose();
-        const model = buildPlant(old.species, hash(old.key), theme);
+        const model = buildPlant(old.species, old.seed, theme, old.stage);
         old.model = model;
         old.sway = { ...old.sway, holder: holderAt(old.spot, model) };
       }
@@ -423,25 +464,26 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
     for (const p of plants) {
       seen.add(p.id);
       const e = kept.get(p.id);
-      if (e && (e.species !== p.species || e.x !== p.x || e.y !== p.y)) {
+      // A new stage is a new model (only that one rebuilds).
+      if (e && (e.species !== p.species || e.x !== p.x || e.y !== p.y || e.stage !== p.stage)) {
         disposeKept(e);
         kept.delete(p.id);
       }
       const cur = kept.get(p.id);
       if (!cur) {
-        // Same key as the growing plant, so a saved plant keeps the look it grew with.
-        const seed = hash(`${p.species}:${p.x},${p.y}`);
-        const model = buildPlant(p.species, seed, theme);
-        model.setGrowth(p.status === "WITHERED" ? WITHERED_GROWTH : 1);
+        // Same seed as the growing plant, so a saved plant keeps the look it grew with.
+        const seed = plantSeed(p.species, p);
+        const model = buildPlant(p.species, seed, theme, p.stage);
+        model.setGrowth(restingGrowth(p));
         model.setWithered(p.status === "WITHERED" ? 1 : 0);
         const holder = holderAt(p, model);
         kept.set(p.id, {
-          id: p.id, species: p.species, x: p.x, y: p.y, status: p.status, model,
+          id: p.id, species: p.species, x: p.x, y: p.y, stage: p.stage, status: p.status, model,
           sway: { holder, ...swayFor(seed, p.status === "WITHERED") },
         });
       } else if (cur.status !== p.status) {
         cur.status = p.status;
-        cur.model.setGrowth(p.status === "WITHERED" ? WITHERED_GROWTH : 1);
+        cur.model.setGrowth(restingGrowth(p));
         cur.model.setWithered(p.status === "WITHERED" ? 1 : 0);
         cur.sway.amount = p.status === "WITHERED" ? 0.4 : 1;
       }
@@ -457,20 +499,24 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
     if (!g) {
       disposeGrowing();
     } else {
-      const key = `${g.species}:${g.spot.x},${g.spot.y}`;
-      const shown = shownGrowth(g);
+      // The stage is in the key, so growing into a new stage is a new model;
+      // it is not in the seed, so a tree keeps its look.
+      const key = `${g.species}:${g.spot.x},${g.spot.y}:${g.stage}`;
+      const tend = Boolean(g.tendId);
+      const shown = shownGrowth({ progress: g.progress, outcome: g.outcome, tend });
       if (!growing || growing.key !== key) {
         // A new plant appears in its current state, without animating in.
         // One created with an outcome already set (the end screen replaces the
         // session screen) starts from the session's state and plays the end:
-        // a kept plant grows the rest of the way and bounces, a lost one droops.
+        // a kept plant grows the rest of the way and bounces, a lost one droops
+        // (a lost tend shrinks back to the tree's old stage instead).
         disposeGrowing();
-        const seed = hash(key);
-        const model = buildPlant(g.species, seed, theme);
+        const seed = plantSeed(g.species, g.spot);
+        const model = buildPlant(g.species, seed, theme, g.stage);
         const holder = holderAt(g.spot, model);
         const ending = g.outcome !== null && !reduced;
         growing = {
-          key, spot: { ...g.spot }, species: g.species, model,
+          key, seed, spot: { ...g.spot }, species: g.species, stage: g.stage, tend, model,
           sway: { holder, ...swayFor(seed, false) },
           progress: g.progress, outcome: g.outcome,
           growth: ending ? g.progress : shown.growth, growthTarget: shown.growth,
@@ -480,6 +526,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
         };
         applyGrowing();
       } else {
+        growing.tend = tend;
         if (g.outcome !== growing.outcome) {
           if (isKept(g.outcome) && !reduced) growing.bouncePending = true;
           growing.outcome = g.outcome;
@@ -522,15 +569,51 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
       discsFor = n;
     }
     free = new Set();
-    if (input.pickable) {
+    const tendable = Boolean(input.tendable);
+    if (input.pickable && !tendable) {
       const occupied: Spot[] = [...input.plants];
       if (input.growing) occupied.push(input.growing.spot);
       for (const s of freeSpots(n, occupied)) free.add(spotKey(s));
     }
     const sel = input.selectedSpot ? spotKey(input.selectedSpot) : null;
     for (const [k, d] of discs) d.visible = free.has(k) && k !== sel;
-    marker.group.visible = sel !== null && free.has(sel);
-    if (marker.group.visible && input.selectedSpot) marker.group.position.copy(spotToWorld(input.selectedSpot));
+
+    // Tendable trees: only those drawn at rest (not one a tend is growing).
+    tendIds = new Set();
+    if (tendable) {
+      for (const p of input.plants) if (canTend(p) && kept.has(p.id)) tendIds.add(p.id);
+    }
+    const selTree = tendable && input.selectedTreeId && tendIds.has(input.selectedTreeId)
+      ? kept.get(input.selectedTreeId)!
+      : null;
+    for (const [id, r] of tendRings) {
+      if (!tendIds.has(id)) {
+        spotLayer.remove(r);
+        tendRings.delete(id);
+      }
+    }
+    for (const id of tendIds) {
+      let r = tendRings.get(id);
+      if (!r) {
+        r = new THREE.Mesh(tendGeo, tendMat);
+        r.renderOrder = 1;
+        spotLayer.add(r);
+        tendRings.set(id, r);
+      }
+      const e = kept.get(id)!;
+      r.position.copy(spotToWorld(e)).setY(0.006);
+      r.visible = e !== selTree;
+    }
+
+    if (selTree) {
+      marker.setMode("tree");
+      marker.group.visible = true;
+      marker.group.position.copy(spotToWorld(selTree));
+    } else {
+      marker.setMode("seed");
+      marker.group.visible = sel !== null && free.has(sel);
+      if (marker.group.visible && input.selectedSpot) marker.group.position.copy(spotToWorld(input.selectedSpot));
+    }
   }
 
   // --- interaction ---------------------------------------------------------
@@ -541,15 +624,42 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
   const hit = new THREE.Vector3();
 
   function pickAt(clientX: number, clientY: number) {
-    if (!input.pickable) return;
+    const tending = Boolean(input.tendable);
+    if (!input.pickable && !tending) return;
     const r = canvas.getBoundingClientRect();
     ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
+    if (tending) {
+      // A tap on a tree itself (its crown stands well above its spot) wins.
+      const holders: THREE.Object3D[] = [];
+      const owner = new Map<THREE.Object3D, string>();
+      for (const id of tendIds) {
+        const h = kept.get(id)!.sway.holder;
+        holders.push(h);
+        owner.set(h, id);
+      }
+      for (const x of raycaster.intersectObjects(holders, true)) {
+        let o: THREE.Object3D | null = x.object;
+        while (o && !owner.has(o)) o = o.parent;
+        if (o) {
+          pick.tree(owner.get(o)!);
+          return;
+        }
+      }
+    }
     if (!raycaster.ray.intersectPlane(ground, hit)) return;
     root.worldToLocal(hit);
     // Spot {x, y} is centred on world (x + 0.5, y + 0.5).
     const spot = { x: Math.floor(hit.x), y: Math.floor(hit.z) };
-    if (free.has(spotKey(spot))) pick(spot);
+    if (tending) {
+      for (const id of tendIds) {
+        const e = kept.get(id)!;
+        if (e.x === spot.x && e.y === spot.y) {
+          pick.tree(id);
+          return;
+        }
+      }
+    } else if (free.has(spotKey(spot))) pick.spot(spot);
   }
 
   function onPointerDown(e: PointerEvent) {
@@ -803,6 +913,9 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
       island?.dispose();
       discGeo.dispose();
       discMat.dispose();
+      tendRings.clear();
+      tendGeo.dispose();
+      tendMat.dispose();
       renderer.dispose();
       renderer.forceContextLoss(); // free the GL context now, not at GC
       canvas.remove();
@@ -816,7 +929,7 @@ type Engine = ReturnType<typeof createEngine>;
 // Component
 
 export default function GroveCanvas(props: GroveCanvasProps) {
-  const { plants, growing, pickable, selectedSpot, label } = props;
+  const { plants, growing, pickable, selectedSpot, tendable, selectedTreeId, label } = props;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Engine | null>(null);
   const latest = useRef(props);
@@ -830,7 +943,10 @@ export default function GroveCanvas(props: GroveCanvasProps) {
       engine = createEngine(
         wrapper,
         () => latest.current.onFail(),
-        (s) => latest.current.onPickSpot?.(s),
+        {
+          spot: (s) => latest.current.onPickSpot?.(s),
+          tree: (id) => latest.current.onPickTree?.(id),
+        },
       );
     } catch {
       latest.current.onFail();
@@ -838,7 +954,10 @@ export default function GroveCanvas(props: GroveCanvasProps) {
     }
     engineRef.current = engine;
     const p = latest.current;
-    engine.sync({ plants: p.plants, growing: p.growing, pickable: p.pickable, selectedSpot: p.selectedSpot });
+    engine.sync({
+      plants: p.plants, growing: p.growing, pickable: p.pickable, selectedSpot: p.selectedSpot,
+      tendable: p.tendable, selectedTreeId: p.selectedTreeId,
+    });
     engine.start();
     return () => {
       engineRef.current = null;
@@ -847,8 +966,8 @@ export default function GroveCanvas(props: GroveCanvasProps) {
   }, []);
 
   useEffect(() => {
-    engineRef.current?.sync({ plants, growing, pickable, selectedSpot });
-  }, [plants, growing, pickable, selectedSpot]);
+    engineRef.current?.sync({ plants, growing, pickable, selectedSpot, tendable, selectedTreeId });
+  }, [plants, growing, pickable, selectedSpot, tendable, selectedTreeId]);
 
   return (
     <div

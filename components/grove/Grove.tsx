@@ -18,6 +18,9 @@ export type GroveProps = {
   pickable?: boolean; // show free spots and let one be chosen
   selectedSpot?: Spot | null;
   onPickSpot?: (spot: Spot) => void;
+  tendable?: boolean; // ring the trees that can be tended and let one be chosen; wins over pickable
+  selectedTreeId?: string | null;
+  onPickTree?: (plantId: string) => void;
   label: string; // accessible name, e.g. "Your grove: 12 plants"
   className?: string; // sizes the box; the canvas fills it
   fallback?: ReactNode; // shown instead when WebGL is unavailable

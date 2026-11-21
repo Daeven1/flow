@@ -75,7 +75,7 @@ export function SessionView({ session, now, wakeLockOk, tasks, plants, groveStat
 
   const plant = session.plant;
   const growing: Growing | null = plant
-    ? { species: plant.species, spot: { x: plant.x, y: plant.y }, progress: p, outcome: null }
+    ? { species: plant.species, spot: { x: plant.x, y: plant.y }, stage: 1, progress: p, outcome: null }
     : null;
   // Side by side at lg only when the grove is drawn; the plain bar keeps piece 1's stack.
   const withGrove = growing !== null && !noWebGL;
