@@ -197,7 +197,7 @@ export default function DailyPage() {
     loadData();
   }, [loadData]);
 
-  // Keep urgentCustomOrder in sync when tasks change (preserves manual order, slots new items in by deadline)
+  // Keep urgentCustomOrder in sync when tasks change (preserves manual order, new items on top)
   useEffect(() => {
     const horizon = addDays(startOfDay(new Date()), 1);
     const urgentIds = new Set(
@@ -211,22 +211,12 @@ export default function DailyPage() {
         .sort((a, b) => parseISO(a.deadline!).getTime() - parseISO(b.deadline!).getTime())
         .map((t) => t.id)
     );
-    const deadlineOf = new Map(
-      tasks.filter((t) => t.deadline).map((t) => [t.id, parseISO(t.deadline!).getTime()])
-    );
     setUrgentCustomOrder((prev) => {
       const kept = prev.filter((id) => urgentIds.has(id));
       const keptSet = new Set(kept);
-      const newIds = [...urgentIds].filter((id) => !keptSet.has(id)); // already earliest deadline first
-      // Slot each newcomer in by deadline, ahead of the first kept task due later,
-      // so your dragged order stays put and new arrivals land where they belong.
-      const merged = [...kept];
-      for (const id of newIds) {
-        const dl = deadlineOf.get(id) ?? Infinity;
-        const at = merged.findIndex((k) => (deadlineOf.get(k) ?? Infinity) > dl);
-        merged.splice(at === -1 ? merged.length : at, 0, id);
-      }
-      return merged;
+      // New arrivals go on top (often things to remember right away); your dragged order stays below
+      const newIds = [...urgentIds].filter((id) => !keptSet.has(id));
+      return [...newIds, ...kept];
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks]);
