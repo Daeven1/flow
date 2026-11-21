@@ -64,3 +64,21 @@ test.each([[401, true], [429, true], [500, true], [503, true], [400, false], [40
   "shouldRetry(%i) is %s",
   (status, want) => expect(shouldRetry(status)).toBe(want),
 );
+
+test("parseSaved keeps a tend's stage and drops a stage that is out of range or on a new plant", () => {
+  const tend = { ...valid, plant: { species: "TREE" as const, x: 1, y: 0, tendId: "t1", stage: 2 } };
+  expect(parseSaved(JSON.stringify(tend))).toEqual(tend);
+  const { stage: _s, ...noStage } = tend.plant;
+  void _s;
+  expect(parseSaved(JSON.stringify({ ...tend, plant: { ...tend.plant, stage: 9 } }))).toEqual({ ...valid, plant: noStage });
+  expect(parseSaved(JSON.stringify({ ...tend, plant: { ...tend.plant, stage: "2" } }))).toEqual({ ...valid, plant: noStage });
+  const fern = { species: "FERN" as const, x: 0, y: 0 };
+  expect(parseSaved(JSON.stringify({ ...valid, plant: { ...fern, stage: 2 } }))).toEqual({ ...valid, plant: fern });
+});
+test("parseSaved reads plantDropped when valid and leaves it out otherwise", () => {
+  expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "SEEDS" }))).toEqual({ ...valid, plantDropped: "SEEDS" });
+  expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "TEND" }))).toEqual({ ...valid, plantDropped: "TEND" });
+  expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "NOPE" }))).toEqual(valid);
+  expect(parseSaved(JSON.stringify({ ...valid, plantDropped: null }))).toEqual(valid);
+  expect("plantDropped" in parseSaved(JSON.stringify(valid))!).toBe(false);
+});

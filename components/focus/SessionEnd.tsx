@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { formatClock, progress, type SavedSession } from "@/lib/focus/session";
-import { Grove, type Growing } from "@/components/grove/Grove";
+import { Grove } from "@/components/grove/Grove";
 import type { GrovePlant } from "@/lib/grove/layout";
 import { plantCount } from "@/components/focus/groveText";
+import { growingFor } from "@/components/focus/SessionView";
 
 type Props = {
   session: SavedSession; // an ended session
@@ -59,24 +60,21 @@ export function SessionEnd({ session, plants, onNew }: Props) {
   }
 
   const plant = session.plant;
-  const growing: Growing | null = plant
-    ? {
-        species: plant.species,
-        spot: { x: plant.x, y: plant.y },
-        stage: 1, // tends are wired in task 6
-        progress: progress(session, ended.at),
-        outcome: ended.outcome,
-      }
-    : null;
+  const tend = plant?.tendId !== undefined;
+  if (tend) message += canBreak ? " Your tree grew." : " Your tree is just as it was.";
+  // The stage comes from the saved session, never from a refreshed list, so a
+  // tree that has already grown on the server is not drawn a stage too high.
+  const growing = growingFor(plant, plants, progress(session, ended.at), ended.outcome);
   // The server's copy of this plant may already be in the list (a reload on this
   // screen). On the same spot the grove draws it once; if the server had to move
   // it (the spot was taken meanwhile), leave out a same-species plant planted
-  // since this session started, so it isn't drawn twice.
+  // since this session started, so it isn't drawn twice. A tend leaves out its tree.
   const others = growing
-    ? plants.filter(
-        (p) =>
-          !(p.x === growing.spot.x && p.y === growing.spot.y) &&
-          !(p.species === growing.species && Date.parse(p.plantedAt) >= session.startedAt),
+    ? plants.filter((p) =>
+        tend
+          ? p.id !== growing.tendId
+          : !(p.x === growing.spot.x && p.y === growing.spot.y) &&
+            !(p.species === growing.species && Date.parse(p.plantedAt) >= session.startedAt),
       )
     : plants;
   const total = others.length + (growing ? 1 : 0);

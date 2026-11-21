@@ -8,13 +8,13 @@ import { StickyPile } from "@/components/StickyPile";
 import { SprintBadge } from "@/components/SprintBadge";
 import { SPRINT_COLORS } from "@/lib/utils";
 import { SessionSetup } from "@/components/focus/SessionSetup";
-import { SessionView, type PileTask } from "@/components/focus/SessionView";
+import { SessionView, growingFor, type PileTask } from "@/components/focus/SessionView";
 import { SessionEnd } from "@/components/focus/SessionEnd";
 import { useFocusSession } from "@/lib/focus/useFocusSession";
 import { useGrove } from "@/lib/grove/useGrove";
 import { hasLanded, withPendingPlant, type PendingPlant } from "@/lib/grove/pending";
 import { Grove } from "@/components/grove/Grove";
-import { plantCount } from "@/components/focus/groveText";
+import { plantCount, seedCount } from "@/components/focus/groveText";
 
 type Task = {
   id: string;
@@ -50,6 +50,17 @@ export default function FocusPage() {
       return next.length === prev.length ? prev : next;
     });
   }, [grove.plants]);
+
+  // A plant the server turned down (its start reached the server only after
+  // "New session") never lands: stop showing it.
+  const { plantsDropped } = focus;
+  useEffect(() => {
+    if (plantsDropped.length === 0) return;
+    setPendingPlants((prev) => {
+      const next = prev.filter((pp) => !plantsDropped.includes(pp.startedAt));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [plantsDropped]);
 
   // An end reached the server (perhaps after "New session"): load the grove again.
   const { refresh: refreshGrove } = grove;
@@ -147,7 +158,13 @@ export default function FocusPage() {
       const { plant, ended, startedAt } = prev;
       setPendingPlants((list) => [
         ...list.filter((pp) => pp.startedAt !== startedAt),
-        { species: plant.species, x: plant.x, y: plant.y, outcome: ended.outcome, startedAt, endedAt: ended.at },
+        {
+          species: plant.species, x: plant.x, y: plant.y, outcome: ended.outcome, startedAt, endedAt: ended.at,
+          // a tend: the stage fixed at start (growingFor fills an older save without one)
+          ...(plant.tendId !== undefined
+            ? { tendId: plant.tendId, stage: growingFor(plant, plants, 1, ended.outcome)?.stage }
+            : {}),
+        },
       ]);
     }
     focus.clear();
@@ -229,7 +246,9 @@ export default function FocusPage() {
               {grove.status === "loaded" &&
                 (groveCount === 0
                   ? "Your grove is ready for its first plant."
-                  : `${plantCount(groveCount)} in your grove`)}
+                  : `${plantCount(groveCount)} in your grove${
+                      grove.seeds === null ? "" : ` · ${seedCount(grove.seeds)}`
+                    }`)}
             </p>
           </div>
         )}
@@ -355,6 +374,7 @@ export default function FocusPage() {
                 <SessionSetup
                   taskIds={queue}
                   plants={plants}
+                  seeds={grove.seeds}
                   groveStatus={grove.status}
                   onStart={focus.start}
                 />

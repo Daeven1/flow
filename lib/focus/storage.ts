@@ -1,5 +1,5 @@
-import { parsePlantChoice } from "@/lib/grove/layout";
-import { LENGTHS, type SavedSession } from "./session";
+import { MAX_STAGE, parsePlantChoice } from "@/lib/grove/layout";
+import { LENGTHS, type SavedPlant, type SavedSession } from "./session";
 
 export const STORAGE_KEY = "grove-focus-session";
 export const PENDING_KEY = "grove-focus-pending";
@@ -76,7 +76,7 @@ function validate(v: unknown): SavedSession | null {
     ended = { outcome: e.outcome as NonNullable<SavedSession["ended"]>["outcome"], at: e.at, synced: e.synced };
   }
 
-  return {
+  const out: SavedSession = {
     id: v.id,
     startedAt: v.startedAt,
     plannedMinutes: v.plannedMinutes as SavedSession["plannedMinutes"],
@@ -85,8 +85,21 @@ function validate(v: unknown): SavedSession | null {
     ticks: (v.ticks as { taskId: string; at: number }[]).map((t) => ({ taskId: t.taskId, at: t.at })),
     hiddenAt: v.hiddenAt,
     ended,
-    plant: parsePlantChoice(v.plant),
+    plant: parsePlant(v.plant),
   };
+  if (v.plantDropped === "SEEDS" || v.plantDropped === "TEND") out.plantDropped = v.plantDropped;
+  return out;
+}
+
+/** A saved plant choice; a tend's stage is kept only when it is one a tree can grow into. */
+function parsePlant(v: unknown): SavedPlant | null {
+  const choice = parsePlantChoice(v);
+  if (!choice || choice.tendId === undefined || !isObj(v)) return choice;
+  const stage = v.stage;
+  if (typeof stage === "number" && Number.isInteger(stage) && stage >= 2 && stage <= MAX_STAGE) {
+    return { ...choice, stage };
+  }
+  return choice;
 }
 
 /** Should a failed server call be tried again later? Most 4xx never will succeed. */

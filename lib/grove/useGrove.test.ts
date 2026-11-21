@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGrove } from "./useGrove";
+import { parseGrove, parseSeeds } from "./useGrove";
 
 const plant = {
   id: "p1", species: "FERN", x: 0, y: -1, status: "ALIVE",
@@ -36,5 +36,23 @@ describe("parseGrove", () => {
       "plant",
     ];
     expect(parseGrove({ plants: [...bad, plant] })).toEqual([plant]);
+  });
+});
+
+describe("parseSeeds", () => {
+  it("reads the seed balance of a grove response", () => {
+    expect(parseSeeds({ plants: [], seeds: 0 })).toBe(0);
+    expect(parseSeeds({ plants: [], seeds: 5 })).toBe(5);
+  });
+
+  it("never goes below 0", () => {
+    expect(parseSeeds({ plants: [], seeds: -2 })).toBe(0);
+  });
+
+  it("is null when the balance is missing or not a whole number", () => {
+    expect(parseSeeds({ plants: [] })).toBeNull();
+    expect(parseSeeds({ plants: [], seeds: "3" })).toBeNull();
+    expect(parseSeeds({ plants: [], seeds: 1.5 })).toBeNull();
+    expect(parseSeeds(null)).toBeNull();
   });
 });

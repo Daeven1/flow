@@ -59,3 +59,40 @@ describe("withPendingPlant", () => {
     expect({ x: out[1].x, y: out[1].y }).not.toEqual({ x: 0, y: -1 });
   });
 });
+
+describe("a pending tend", () => {
+  const tree: GrovePlant = {
+    id: "t1", species: "TREE", x: 1, y: 0, status: "ALIVE",
+    plantedAt: "2026-11-18T08:00:00.000Z", witheredAt: null, stage: 1,
+  };
+  const tend = (outcome: PendingPlant["outcome"]): PendingPlant =>
+    ended(outcome, { species: "TREE", x: 1, y: 0, tendId: "t1", stage: 2 });
+
+  it("raises that tree's stage instead of adding a plant", () => {
+    expect(withPendingPlant([old, tree], tend("COMPLETED"))).toEqual([old, { ...tree, stage: 2 }]);
+    expect(hasLanded([old, tree], tend("CLEARED"))).toBe(false);
+  });
+
+  it("is dropped once a refresh shows the tree at or above the stage it grew into", () => {
+    const grown = { ...tree, stage: 2 };
+    expect(hasLanded([grown], tend("COMPLETED"))).toBe(true);
+    expect(withPendingPlant([grown], tend("COMPLETED"))).toEqual([grown]);
+    expect(hasLanded([{ ...tree, stage: 3 }], tend("COMPLETED"))).toBe(true);
+  });
+
+  it("changes nothing for a lost tend", () => {
+    expect(hasLanded([tree], tend("GAVE_UP"))).toBe(true);
+    expect(withPendingPlant([old, tree], tend("LEFT"))).toEqual([old, tree]);
+  });
+
+  it("changes nothing when the tree is gone", () => {
+    expect(hasLanded([old], tend("COMPLETED"))).toBe(true);
+    expect(withPendingPlant([old], tend("COMPLETED"))).toEqual([old]);
+  });
+
+  it("changes nothing for a tend with no target stage", () => {
+    const noStage: PendingPlant = { ...tend("COMPLETED"), stage: undefined };
+    expect(hasLanded([tree], noStage)).toBe(true);
+    expect(withPendingPlant([tree], noStage)).toEqual([tree]);
+  });
+});

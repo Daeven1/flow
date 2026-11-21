@@ -3,9 +3,9 @@
 import { useCallback, useState } from "react";
 import { StickyPile } from "@/components/StickyPile";
 import { Grove, type Growing } from "@/components/grove/Grove";
-import type { GrovePlant } from "@/lib/grove/layout";
+import { MAX_STAGE, type GrovePlant } from "@/lib/grove/layout";
 import type { GroveStatus } from "@/lib/grove/useGrove";
-import { NO_WEBGL_LINE, OnFallback, plantCount, speciesName } from "@/components/focus/groveText";
+import { DROPPED_LINE, NO_WEBGL_LINE, OnFallback, growingLine, plantCount } from "@/components/focus/groveText";
 import {
   formatClock,
   progress,
@@ -20,6 +20,24 @@ export type PileTask = {
   sprint?: number;
   estMinutes?: number;
 };
+
+/**
+ * What the canvas grows for a session's plant. A tend grows the stage saved at
+ * start; an older save without one grows its tree one stage from the list.
+ */
+export function growingFor(
+  plant: SavedSession["plant"],
+  plants: GrovePlant[],
+  p: number,
+  outcome: Outcome | null,
+): Growing | null {
+  if (!plant) return null;
+  const spot = { x: plant.x, y: plant.y };
+  if (plant.tendId === undefined) return { species: plant.species, spot, stage: 1, progress: p, outcome };
+  const tree = plants.find((t) => t.id === plant.tendId);
+  const stage = plant.stage ?? Math.min(MAX_STAGE, (tree?.stage ?? 1) + 1);
+  return { species: "TREE", spot, stage, progress: p, outcome, tendId: plant.tendId };
+}
 
 // The one slot piece 2 replaces with the grove. Keep its props as they are.
 export function FocusVisual({ progress, outcome }: { progress: number; outcome: Outcome | null }) {
@@ -74,9 +92,7 @@ export function SessionView({ session, now, wakeLockOk, tasks, plants, groveStat
   ];
 
   const plant = session.plant;
-  const growing: Growing | null = plant
-    ? { species: plant.species, spot: { x: plant.x, y: plant.y }, stage: 1, progress: p, outcome: null }
-    : null;
+  const growing = growingFor(plant, plants, p, null); // a tend reads "Your tree is growing."
   // Side by side at lg only when the grove is drawn; the plain bar keeps piece 1's stack.
   const withGrove = growing !== null && !noWebGL;
   const wakeWarning = session.rule === "STRICT" && wakeLockOk === false;
@@ -85,6 +101,9 @@ export function SessionView({ session, now, wakeLockOk, tasks, plants, groveStat
     <div className="w-full flex flex-col items-center gap-2 py-2">
       <FocusVisual progress={p} outcome={null} />
       {growing && <p className="text-sm text-slate-600 dark:text-zinc-400 text-center">{NO_WEBGL_LINE}</p>}
+      {!growing && session.plantDropped && (
+        <p className="text-sm text-slate-600 dark:text-zinc-400 text-center">{DROPPED_LINE[session.plantDropped]}</p>
+      )}
     </div>
   );
 
@@ -99,9 +118,9 @@ export function SessionView({ session, now, wakeLockOk, tasks, plants, groveStat
           <Grove
             plants={plants}
             growing={growing}
-            label={`Your ${speciesName(growing.species, true)} ${
-              growing.species === "FERN" ? "is" : "are"
-            } growing.${groveStatus === "failed" ? "" : ` ${plantCount(plants.length)} in your grove`}`}
+            label={`${growingLine(growing.species)}${
+              groveStatus === "failed" ? "" : ` ${plantCount(plants.length)} in your grove`
+            }`}
             className={`w-full ${wakeWarning ? "h-[30svh]" : "h-[38svh]"} min-h-[180px] lg:h-[min(calc(100svh_-_240px),560px)] lg:min-h-[320px]`}
             fallback={
               <>

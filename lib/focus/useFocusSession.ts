@@ -7,6 +7,7 @@ import {
   segments,
   type FocusRule,
   type PlannedMinutes,
+  type SavedPlant,
   type SavedSession,
 } from "./session";
 import { PENDING_KEY, STORAGE_KEY, parsePending, parseSaved, shouldRetry } from "./storage";
@@ -17,7 +18,8 @@ export type FocusSessionApi = {
   now: number; // ticks about once a second while running
   wakeLockOk: boolean | null; // null = not requested; false = unsupported or refused
   endsSynced: number; // goes up each time an end reaches the server (this session's or a pending one)
-  start(input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[]; plant: PlantChoice | null }): void;
+  plantsDropped: number[]; // startedAt of each session whose plant the server turned down (this page load)
+  start(input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[]; plant: SavedPlant | null }): void;
   tick(taskId: string): void; // records the tick; ends as CLEARED if it was the last
   giveUp(): void; // ends as GAVE_UP
   clear(): void; // forget an ended session
@@ -60,15 +62,32 @@ type PushResult = {
   startRejected: boolean; // the start POST got a 4xx and can never succeed
   endDone: boolean; // the end no longer needs sending (sent, or can never succeed)
   endSaved: boolean; // the end PATCH succeeded just now
+  plantDropped: boolean; // the start POST just answered plantAccepted: false
 };
+
+// What the server is sent: the choice alone, never the saved stage.
+function toChoice(p: SavedPlant | null): PlantChoice | null {
+  if (!p) return null;
+  return p.tendId !== undefined
+    ? { species: p.species, x: p.x, y: p.y, tendId: p.tendId }
+    : { species: p.species, x: p.x, y: p.y };
+}
+
+/** The session as a plain one, after the server turned its plant down. */
+function withoutPlant(s: SavedSession): SavedSession {
+  if (!s.plant) return s;
+  return { ...s, plant: null, plantDropped: s.plant.tendId !== undefined ? "TEND" : "SEEDS" };
+}
 
 // One server round for a session: start first if it has no id, then the end.
 // Never throws; network errors and 5xx leave things for a later retry.
 async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
   let id = s.id;
+  let plantDropped = false;
+  const none = { endSaved: false, plantDropped: false };
   try {
     if (id === null) {
-      if (skipStart) return { id, startRejected: true, endDone: !!s.ended, endSaved: false };
+      if (skipStart) return { id, startRejected: true, endDone: !!s.ended, ...none };
       const res = await fetch("/api/focus/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -77,19 +96,20 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
           plannedMinutes: s.plannedMinutes,
           rule: s.rule,
           taskIds: s.taskIds,
-          plant: s.plant,
+          plant: toChoice(s.plant),
         }),
       });
       if (res.status >= 400 && res.status < 500 && !shouldRetry(res.status)) {
-        return { id, startRejected: true, endDone: !!s.ended, endSaved: false };
+        return { id, startRejected: true, endDone: !!s.ended, ...none };
       }
-      if (!res.ok) return { id, startRejected: false, endDone: false, endSaved: false };
-      const body = (await res.json()) as { id?: unknown };
-      if (typeof body.id !== "string") return { id, startRejected: false, endDone: false, endSaved: false };
+      if (!res.ok) return { id, startRejected: false, endDone: false, ...none };
+      const body = (await res.json()) as { id?: unknown; plantAccepted?: unknown };
+      if (typeof body.id !== "string") return { id, startRejected: false, endDone: false, ...none };
       id = body.id;
+      plantDropped = body.plantAccepted === false && s.plant !== null;
     }
     const ended = s.ended;
-    if (!ended) return { id, startRejected: false, endDone: false, endSaved: false };
+    if (!ended) return { id, startRejected: false, endDone: false, endSaved: false, plantDropped };
     const res = await fetch(`/api/focus/sessions/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -102,9 +122,9 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
     });
     // 400/404 can never succeed, so stop retrying; 5xx may recover later.
     const done = res.ok || res.status === 400 || res.status === 404;
-    return { id, startRejected: false, endDone: done, endSaved: res.ok };
+    return { id, startRejected: false, endDone: done, endSaved: res.ok, plantDropped };
   } catch {
-    return { id, startRejected: false, endDone: false, endSaved: false };
+    return { id, startRejected: false, endDone: false, endSaved: false, plantDropped };
   }
 }
 
@@ -122,6 +142,10 @@ export function useFocusSession(): FocusSessionApi {
   const [now, setNow] = useState(() => Date.now());
   const [wakeLockOk, setWakeLockOk] = useState<boolean | null>(null);
   const [endsSynced, setEndsSynced] = useState(0);
+  const [plantsDropped, setPlantsDropped] = useState<number[]>([]);
+  const noteDropped = useCallback((startedAt: number) => {
+    setPlantsDropped((list) => (list.includes(startedAt) ? list : [...list, startedAt]));
+  }, []);
 
   // The ref is the latest truth, so event handlers never see stale state.
   const ref = useRef<SavedSession | null>(null);
@@ -160,8 +184,11 @@ export function useFocusSession(): FocusSessionApi {
       for (const entry of list) {
         const r = await push(entry, false);
         if (r.endSaved) saved++;
+        if (r.plantDropped) noteDropped(entry.startedAt);
         if (r.endDone) continue; // sent, or can never succeed (including a rejected start)
-        keep.push(r.id !== entry.id ? { ...entry, id: r.id } : entry);
+        let next = r.id !== entry.id ? { ...entry, id: r.id } : entry;
+        if (r.plantDropped) next = withoutPlant(next);
+        keep.push(next);
       }
       // entries added by clear() while we were busy stay too
       const done = new Set(list.map((e) => e.startedAt));
@@ -171,7 +198,7 @@ export function useFocusSession(): FocusSessionApi {
     } finally {
       flushing.current = false;
     }
-  }, []);
+  }, [noteDropped]);
 
   // Server sync for the current session. Never awaited by the UI.
   const sync = useCallback(async () => {
@@ -188,19 +215,24 @@ export function useFocusSession(): FocusSessionApi {
       const r = await push(s, skipStart);
       if (r.startRejected) rejectedStart.current = s.startedAt;
       if (r.endSaved) setEndsSynced((c) => c + 1);
+      if (r.plantDropped) noteDropped(s.startedAt);
 
       if (ref.current?.startedAt !== s.startedAt) {
         // the session was moved to the pending list while we were talking to the
         // server: keep what we learned (the id), or drop the entry if it is done
         const rest = readPending().filter((e) => e.startedAt !== s.startedAt);
         const entry = readPending().find((e) => e.startedAt === s.startedAt);
-        if (entry && !r.endDone) rest.push(r.id !== null ? { ...entry, id: r.id } : entry);
+        if (entry && !r.endDone) {
+          const next = r.id !== null ? { ...entry, id: r.id } : entry;
+          rest.push(r.plantDropped ? withoutPlant(next) : next);
+        }
         writePending(rest);
         return;
       }
       patch(s.startedAt, (c) => {
         let next = c;
         if (r.id !== null && c.id !== r.id) next = { ...next, id: r.id };
+        if (r.plantDropped) next = withoutPlant(next);
         // the end may have happened while the request was in flight: only trust it
         // if what we sent was the same end
         if (r.endDone && s.ended && next.ended && !next.ended.synced && next.ended.at === s.ended.at) {
@@ -218,7 +250,7 @@ export function useFocusSession(): FocusSessionApi {
         void flushPending();
       }
     }
-  }, [patch, flushPending]);
+  }, [patch, flushPending, noteDropped]);
 
   const syncAll = useCallback(() => {
     void sync();
@@ -429,5 +461,5 @@ export function useFocusSession(): FocusSessionApi {
     else void flushPending();
   }, [commit, flushPending]);
 
-  return { ready, session, now, wakeLockOk, endsSynced, start, tick, giveUp, clear };
+  return { ready, session, now, wakeLockOk, endsSynced, plantsDropped, start, tick, giveUp, clear };
 }

@@ -16,8 +16,13 @@ export type SavedSession = {
   ticks: Tick[]; // tasks ticked off, in order
   hiddenAt: number | null; // when the page last became hidden, if still hidden
   ended: Ended | null;
-  plant: PlantChoice | null; // the plant this session grows, if one was chosen
+  plant: SavedPlant | null; // the plant this session grows, if one was chosen
+  plantDropped?: PlantDropped; // the server turned the plant down at start, so this is a plain session
 };
+/** A session's plant choice; a tend also keeps the stage its tree grows into (fixed at start). */
+export type SavedPlant = PlantChoice & { stage?: number };
+/** Why the server dropped a session's plant: not enough seeds, or a tree that can't be tended. */
+export type PlantDropped = "SEEDS" | "TEND";
 export type Segment = { taskId: string; minutes: number };
 
 export const GRACE_MS = 10_000;
