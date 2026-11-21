@@ -7,6 +7,8 @@ export type PlantingSession = {
   plantSpecies: string | null;
   plantX: number | null;
   plantY: number | null;
+  /** Set when the session tends an existing tree instead of growing a new plant. */
+  tendPlantId: string | null;
 };
 
 export type NewPlant = {
@@ -19,14 +21,15 @@ export type NewPlant = {
   witheredAt: Date | null;
 };
 
-/** The plant a finished session leaves behind, or null when it had none. */
+/** The plant a finished session leaves behind, or null when it had none or tended a tree. */
 export function planFor(
   session: PlantingSession,
   outcome: Outcome,
   endedAt: Date,
   occupied: Spot[],
 ): NewPlant | null {
-  const { plantSpecies, plantX, plantY } = session;
+  const { plantSpecies, plantX, plantY, tendPlantId } = session;
+  if (tendPlantId !== null) return null;
   if (!isSpecies(plantSpecies) || plantX === null || plantY === null) return null;
   const want = { x: plantX, y: plantY };
   const spot =

@@ -18,6 +18,14 @@ test("parseStart drops a missing or invalid plant without rejecting", () => {
   expect(bad).not.toBeNull();
   expect(bad?.plant).toBeNull();
 });
+test("parseStart keeps a tend choice and drops a tend of a non-tree without rejecting", () => {
+  const base = { startedAt: "2026-11-19T02:00:00.000Z", plannedMinutes: 25, rule: "STRICT", taskIds: ["a"] };
+  expect(parseStart({ ...base, plant: { species: "TREE", x: 2, y: 3, tendId: "p1" } })?.plant)
+    .toEqual({ species: "TREE", x: 2, y: 3, tendId: "p1" });
+  const fern = parseStart({ ...base, plant: { species: "FERN", x: 0, y: 0, tendId: "p1" } });
+  expect(fern).not.toBeNull();
+  expect(fern?.plant).toBeNull();
+});
 test.each([
   [{ startedAt: "nope", plannedMinutes: 25, rule: "STRICT", taskIds: ["a"] }],
   [{ startedAt: "2026-11-19T02:00:00.000Z", plannedMinutes: 45, rule: "STRICT", taskIds: ["a"] }],

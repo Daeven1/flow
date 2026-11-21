@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import { parseEnd } from "@/lib/focus/validate";
-import { witherExpiry } from "@/lib/grove/layout";
+import { MAX_STAGE, witherExpiry } from "@/lib/grove/layout";
 import { planFor } from "@/lib/grove/planting";
 
 export async function PATCH(
@@ -35,7 +35,16 @@ export async function PATCH(
     });
     if (claimed.count === 0) return;
 
-    // Only the request that won the claim plants. skipDuplicates (ON CONFLICT
+    // Only the request that won the claim tends, so a retry raises a stage once.
+    // A lost tend changes nothing; a tended tree never dies or shrinks.
+    if (session.tendPlantId !== null && logTime) {
+      await tx.grovePlant.updateMany({
+        where: { id: session.tendPlantId, userId, status: "ALIVE", stage: { lt: MAX_STAGE } },
+        data: { stage: { increment: 1 } },
+      });
+    }
+
+    // Only the request that won the claim plants (never for a tend). skipDuplicates (ON CONFLICT
     // DO NOTHING on sessionId) keeps a duplicate from aborting the transaction.
     const now = new Date();
     const existing = await tx.grovePlant.findMany({
