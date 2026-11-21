@@ -175,11 +175,17 @@ export default function DailyPage() {
     ]);
     const logData = await logRes.json();
     const tasksData = await tasksRes.json();
+    let forageOrder: string = logData?.forageOrder ?? "";
+    if (!forageOrder || forageOrder === "[]") {
+      // Nothing dragged yet today: carry over the last order you set
+      const prevRes = await fetch(`/api/daily?date=${todayStr}&lastForage=1`);
+      if (prevRes.ok) forageOrder = (await prevRes.json()).forageOrder ?? "";
+    }
+    if (forageOrder) {
+      try { setUrgentCustomOrder(JSON.parse(forageOrder)); } catch { /* ignore corrupt data */ }
+    }
     if (logData) {
       setLog(logData);
-      if (logData.forageOrder) {
-        try { setUrgentCustomOrder(JSON.parse(logData.forageOrder)); } catch { /* ignore corrupt data */ }
-      }
       if (logData.flaggedForageIds) {
         try { setFlaggedForageIds(JSON.parse(logData.flaggedForageIds)); } catch { /* ignore */ }
       }
@@ -191,7 +197,7 @@ export default function DailyPage() {
     loadData();
   }, [loadData]);
 
-  // Keep urgentCustomOrder in sync when tasks change (preserves manual order, appends new items)
+  // Keep urgentCustomOrder in sync when tasks change (preserves manual order, slots new items in by deadline)
   useEffect(() => {
     const horizon = addDays(startOfDay(new Date()), 1);
     const urgentIds = new Set(
@@ -205,11 +211,22 @@ export default function DailyPage() {
         .sort((a, b) => parseISO(a.deadline!).getTime() - parseISO(b.deadline!).getTime())
         .map((t) => t.id)
     );
+    const deadlineOf = new Map(
+      tasks.filter((t) => t.deadline).map((t) => [t.id, parseISO(t.deadline!).getTime()])
+    );
     setUrgentCustomOrder((prev) => {
       const kept = prev.filter((id) => urgentIds.has(id));
       const keptSet = new Set(kept);
-      const newIds = [...urgentIds].filter((id) => !keptSet.has(id));
-      return [...newIds, ...kept];
+      const newIds = [...urgentIds].filter((id) => !keptSet.has(id)); // already earliest deadline first
+      // Slot each newcomer in by deadline, ahead of the first kept task due later,
+      // so your dragged order stays put and new arrivals land where they belong.
+      const merged = [...kept];
+      for (const id of newIds) {
+        const dl = deadlineOf.get(id) ?? Infinity;
+        const at = merged.findIndex((k) => (deadlineOf.get(k) ?? Infinity) > dl);
+        merged.splice(at === -1 ? merged.length : at, 0, id);
+      }
+      return merged;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks]);

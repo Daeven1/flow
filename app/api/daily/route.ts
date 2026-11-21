@@ -13,6 +13,17 @@ export async function GET(req: Request) {
   const dateParam = searchParams.get("date");
   const date = dateParam ? startOfDay(new Date(dateParam)) : startOfDay(new Date());
 
+  // ?lastForage=1 → the most recent Forage order saved before this date,
+  // so a hand-dragged order carries over into new days.
+  if (searchParams.get("lastForage")) {
+    const prev = await prisma.dailyLog.findFirst({
+      where: { userId, date: { lt: date }, forageOrder: { notIn: ["", "[]"] } },
+      orderBy: { date: "desc" },
+      select: { forageOrder: true },
+    });
+    return NextResponse.json({ forageOrder: prev?.forageOrder ?? "" });
+  }
+
   const log = await prisma.dailyLog.findUnique({
     where: { userId_date: { userId, date } },
   });
