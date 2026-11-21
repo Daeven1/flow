@@ -7,7 +7,7 @@ import { getUser } from "@/lib/auth";
 import { getWorkNightDays } from "@/lib/workNightDays";
 import { validateApiKey } from "@/lib/remindersAuth";
 import { addSeeds } from "@/lib/grove/seedStore";
-import { seedDelta } from "@/lib/grove/seeds";
+import { tickDelta } from "@/lib/grove/seeds";
 
 export async function PATCH(
   req: Request,
@@ -72,7 +72,7 @@ export async function PATCH(
   // Read the task's done state before the update so only a real flip earns or loses a seed
   const before =
     "done" in body
-      ? await prisma.task.findUnique({ where: { id, userId }, select: { done: true } })
+      ? await prisma.task.findUnique({ where: { id, userId }, select: { done: true, doneAt: true } })
       : null;
 
   const task = await prisma.task.update({
@@ -83,7 +83,7 @@ export async function PATCH(
 
   if (before) {
     try {
-      await addSeeds(prisma, userId, seedDelta(before.done, task.done));
+      await addSeeds(prisma, userId, tickDelta(before, task.done));
     } catch (e) {
       console.error("addSeeds failed", e);
     }

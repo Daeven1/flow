@@ -24,15 +24,18 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ success: true }); // no-op: task deleted, not found, or already done
   }
 
-  await prisma.task.update({
-    where: { id: task.id },
+  // Conditional, so a duplicate Shortcut call can't mark it done (and earn a seed) twice
+  const marked = await prisma.task.updateMany({
+    where: { id: task.id, userId, done: false },
     data: { done: true, doneAt: new Date() },
   });
 
-  try {
-    await addSeeds(prisma, userId, 1);
-  } catch (e) {
-    console.error("addSeeds failed", e);
+  if (marked.count === 1) {
+    try {
+      await addSeeds(prisma, userId, 1);
+    } catch (e) {
+      console.error("addSeeds failed", e);
+    }
   }
 
   return NextResponse.json({ success: true });
