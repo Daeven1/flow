@@ -201,6 +201,8 @@ export default function DailyPage() {
           if (!t.deadline) return false;
           return startOfDay(parseISO(t.deadline)) <= horizon;
         })
+        // Most overdue (earliest deadline) first, so a fresh day starts with the oldest debts on top
+        .sort((a, b) => parseISO(a.deadline!).getTime() - parseISO(b.deadline!).getTime())
         .map((t) => t.id)
     );
     setUrgentCustomOrder((prev) => {
@@ -453,7 +455,9 @@ export default function DailyPage() {
       ? urgentCustomOrder
           .map((id) => urgentNow.find((t) => t.id === id))
           .filter((t): t is Task => t !== undefined)
-      : urgentNow;
+      : [...urgentNow].sort(
+          (a, b) => parseISO(a.deadline!).getTime() - parseISO(b.deadline!).getTime()
+        );
 
   // Sort helper: by sprint, then by deadline soonest-first
   function sortBySprintThenDeadline(list: Task[]) {
