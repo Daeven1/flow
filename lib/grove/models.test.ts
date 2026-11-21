@@ -38,7 +38,7 @@ const GROWN_BOX = {
   WILDFLOWERS: { min: [-0.36138, -0.0066, -0.34713], max: [0.34525, 0.67358, 0.32133] },
   FERN: { min: [-0.33818, -0.00539, -0.30406], max: [0.37334, 0.60907, 0.34757] },
 } as const;
-test.each(SPECIES)("%s looks the same fully grown as before the sprout", (sp) => {
+test.each(["WILDFLOWERS", "FERN"] as const)("%s looks the same fully grown as before the sprout", (sp) => {
   const m = buildPlant(sp, 11, "light"); m.setGrowth(1);
   const box = new THREE.Box3().setFromObject(m.group);
   const want = new THREE.Box3(new THREE.Vector3(...GROWN_BOX[sp].min), new THREE.Vector3(...GROWN_BOX[sp].max));

@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isSpecies, type GrovePlant } from "./layout";
+import { isSpecies, MAX_STAGE, type GrovePlant } from "./layout";
 
 export type GroveStatus = "loading" | "loaded" | "failed";
 
-function isPlant(v: unknown): v is GrovePlant {
+function isPlant(v: unknown): v is Omit<GrovePlant, "stage"> {
   if (typeof v !== "object" || v === null) return false;
   const p = v as Record<string, unknown>;
   return (
@@ -24,7 +24,13 @@ export function parseGrove(body: unknown): GrovePlant[] | null {
   if (typeof body !== "object" || body === null) return null;
   const plants = (body as Record<string, unknown>).plants;
   if (!Array.isArray(plants)) return null;
-  return plants.filter(isPlant);
+  return plants.filter(isPlant).map((p) => {
+    const stage = (p as { stage?: unknown }).stage;
+    return {
+      ...p,
+      stage: typeof stage === "number" && Number.isInteger(stage) && stage >= 1 && stage <= MAX_STAGE ? stage : 1,
+    };
+  });
 }
 
 /**

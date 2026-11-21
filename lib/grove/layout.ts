@@ -1,12 +1,22 @@
-export const SPECIES = ["WILDFLOWERS", "FERN"] as const;
+export const SPECIES = ["WILDFLOWERS", "FERN", "BERRY_BUSH", "TREE"] as const;
 export type Species = (typeof SPECIES)[number];
+/** Seeds a new plant costs. */
+export const COST: Record<Species, number> = { WILDFLOWERS: 0, FERN: 0, BERRY_BUSH: 2, TREE: 3 };
+/** TREE: 1 sapling, 2 young tree, 3 mature tree; every other species is always 1. */
+export const MAX_STAGE = 3;
 export type PlantStatus = "ALIVE" | "WITHERED";
 export type Spot = { x: number; y: number };
 export type GrovePlant = {
   id: string; species: Species; x: number; y: number;
   status: PlantStatus; plantedAt: string; witheredAt: string | null; // ISO strings
+  stage: number;
 };
-export type PlantChoice = { species: Species; x: number; y: number };
+export type PlantChoice = { species: Species; x: number; y: number; tendId?: string };
+
+/** A living tree that has not reached its last stage. */
+export function canTend(p: GrovePlant): boolean {
+  return p.species === "TREE" && p.status === "ALIVE" && p.stage < MAX_STAGE;
+}
 
 export function isSpecies(v: unknown): v is Species {
   return typeof v === "string" && (SPECIES as readonly string[]).includes(v);
@@ -85,10 +95,13 @@ export function parseTz(v: unknown): number {
 
 export function parsePlantChoice(v: unknown): PlantChoice | null {
   if (typeof v !== "object" || v === null) return null;
-  const { species, x, y } = v as Record<string, unknown>;
+  const { species, x, y, tendId } = v as Record<string, unknown>;
   if (!isSpecies(species)) return null;
   const ok = (c: unknown): c is number =>
     typeof c === "number" && Number.isInteger(c) && c >= -20 && c <= 19;
   if (!ok(x) || !ok(y)) return null;
-  return { species, x, y };
+  if (tendId === undefined) return { species, x, y };
+  if (typeof tendId !== "string" || tendId.length === 0 || tendId.length > 64) return null;
+  if (species !== "TREE") return null;
+  return { species, x, y, tendId };
 }

@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import {
+  canTend,
   defaultSpot,
   gridSize,
   nearestFree,
@@ -40,4 +41,18 @@ test("plant choice parsing", () => {
   expect(parsePlantChoice({ species: "FERN", x: 0.5, y: 0 })).toBeNull();
   expect(parsePlantChoice({ species: "FERN", x: 20, y: 0 })).toBeNull();
   expect(parsePlantChoice(null)).toBeNull();
+});
+
+test("plant choice with a tend id", () => {
+  expect(parsePlantChoice({ species: "TREE", x: 1, y: 2, tendId: "abc" })).toEqual({ species: "TREE", x: 1, y: 2, tendId: "abc" });
+  expect(parsePlantChoice({ species: "FERN", x: 1, y: 2, tendId: "abc" })).toBeNull();
+  expect(parsePlantChoice({ species: "TREE", x: 1, y: 2, tendId: "" })).toBeNull();
+  expect(parsePlantChoice({ species: "BERRY_BUSH", x: 0, y: 0 })).toEqual({ species: "BERRY_BUSH", x: 0, y: 0 });
+});
+test("only a living, unfinished tree can be tended", () => {
+  const t = { id: "t", species: "TREE", x: 0, y: 0, status: "ALIVE", plantedAt: "", witheredAt: null, stage: 2 } as const;
+  expect(canTend(t)).toBe(true);
+  expect(canTend({ ...t, stage: 3 })).toBe(false);
+  expect(canTend({ ...t, status: "WITHERED" })).toBe(false);
+  expect(canTend({ ...t, species: "FERN", stage: 1 })).toBe(false);
 });

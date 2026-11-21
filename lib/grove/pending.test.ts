@@ -9,7 +9,7 @@ const ended = (outcome: PendingPlant["outcome"], over: Partial<PendingPlant> = {
 });
 const old: GrovePlant = {
   id: "p1", species: "WILDFLOWERS", x: -1, y: -1, status: "ALIVE",
-  plantedAt: "2026-11-18T08:00:00.000Z", witheredAt: null,
+  plantedAt: "2026-11-18T08:00:00.000Z", witheredAt: null, stage: 1,
 };
 
 describe("withPendingPlant", () => {
@@ -19,7 +19,7 @@ describe("withPendingPlant", () => {
       old,
       {
         id: `pending:${START}`, species: "FERN", x: 0, y: -1, status: "ALIVE",
-        plantedAt: new Date(END).toISOString(), witheredAt: null,
+        plantedAt: new Date(END).toISOString(), witheredAt: null, stage: 1,
       },
     ]);
   });

@@ -33,7 +33,8 @@ export function mulberry32(seed: number): () => number {
 }
 
 export function fullHeight(species: Species): number {
-  return species === "WILDFLOWERS" ? 0.7 : 0.6;
+  // TODO(Task 4): real heights for BERRY_BUSH and TREE; they borrow wildflowers for now.
+  return species === "FERN" ? 0.6 : 0.7;
 }
 
 /** Spots are 1 unit apart; {x:-0.5,y:-0.5} is the origin; grid y is world z. */
@@ -629,6 +630,7 @@ function buildFern(seed: number, theme: Theme): PlantModel {
 }
 
 export function buildPlant(species: Species, seed: number, theme: Theme): PlantModel {
+  // TODO(Task 4): real BERRY_BUSH and TREE models; they borrow wildflowers for now.
   return species === "FERN" ? buildFern(seed, theme) : buildWildflowers(seed, theme);
 }
 

@@ -9,6 +9,7 @@ import {
   type PlannedMinutes,
 } from "@/lib/focus/session";
 import {
+  COST,
   SPECIES,
   defaultSpot,
   freeSpots,
@@ -139,7 +140,7 @@ export function SessionSetup({ taskIds, plants, groveStatus, onStart }: Props) {
             What to grow
           </div>
           <div role="group" aria-labelledby="focus-plant-label" className="flex gap-2">
-            {SPECIES.map((sp) => (
+            {SPECIES.filter((sp) => COST[sp] === 0).map((sp) => (
               <button
                 key={sp}
                 type="button"

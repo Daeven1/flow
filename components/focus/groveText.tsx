@@ -5,7 +5,7 @@ import type { Species } from "@/lib/grove/layout";
 
 /** Display name, capitalised for buttons; lower case inside sentences. */
 export function speciesName(s: Species, inSentence = false): string {
-  const name = s === "FERN" ? "Fern" : "Wildflowers";
+  const name = { WILDFLOWERS: "Wildflowers", FERN: "Fern", BERRY_BUSH: "Berry bush", TREE: "Tree" }[s];
   return inSentence ? name.toLowerCase() : name;
 }
 

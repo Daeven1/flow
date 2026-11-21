@@ -40,6 +40,7 @@ export async function GET(req: Request) {
       status: p.status as PlantStatus,
       plantedAt: p.plantedAt.toISOString(),
       witheredAt: p.witheredAt ? p.witheredAt.toISOString() : null,
+      stage: 1, // TODO(Task 2): read the stage column
     }));
 
   return NextResponse.json({ plants });

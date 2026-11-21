@@ -47,6 +47,7 @@ export function withPendingPlant(plants: GrovePlant[], ended: PendingPlant): Gro
       status: kept ? "ALIVE" : "WITHERED",
       plantedAt: at,
       witheredAt: kept ? null : at,
+      stage: 1,
     },
   ];
 }

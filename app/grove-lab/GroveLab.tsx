@@ -36,6 +36,7 @@ function labPlants(count: number): GrovePlant[] {
       status: i % 7 === 6 ? "WITHERED" : "ALIVE",
       plantedAt: "2026-11-01T08:00:00.000Z",
       witheredAt: i % 7 === 6 ? "2026-11-01T08:30:00.000Z" : null,
+      stage: 1,
     });
   }
   return out;
