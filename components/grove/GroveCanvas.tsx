@@ -11,7 +11,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { canTend, freeSpots, gridSize, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
-import { MAX_PLANT_HEIGHT, buildIsland, buildPlant, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
+import { MAX_CROWN_REACH, MAX_PLANT_HEIGHT, buildIsland, buildPlant, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
 import { WITHERED_GROWTH, approach, shownGrowth } from "@/lib/grove/tween";
 import type { Outcome } from "@/lib/focus/session";
 
@@ -49,12 +49,6 @@ const FOV = 30; // vertical, degrees
 const FILL = 0.9;
 const MAX_FILL = 0.98;
 const START_YAW = -Math.PI / 10;
-// Tallest a plant can reach: the tallest species, its +6 % seeded size
-// variation, the kept-outcome bounce and a little sway.
-const PLANT_TOP = MAX_PLANT_HEIGHT * 1.06 * (1 + 0.08) + 0.03;
-// How far a full plant spreads from its spot centre: a mature tree's crown
-// (about 1.1 across, times its seeded size) plus the kept-outcome bounce.
-const PLANT_REACH = 0.72;
 const GROWTH_HALF_LIFE = 600; // ms
 const DROOP_MS = 1500;
 const BOUNCE_MS = 400;
@@ -62,6 +56,15 @@ const BOUNCE_SCALE = 0.08;
 // A kept plant bounces once it has (nearly) finished growing to full size.
 const BOUNCE_WHEN_WITHIN = 0.05;
 const SWAY_AMPLITUDE = 0.035; // radians, about 2 degrees
+// Sway turns a plant about x by 0.6 of this and about z by all of it at once.
+const SWAY_TILT = SWAY_AMPLITUDE * Math.hypot(1, 0.6);
+// Tallest a plant can reach: the tallest species, its +6 % seeded size
+// variation, the kept-outcome bounce and a little sway.
+const PLANT_TOP = MAX_PLANT_HEIGHT * 1.06 * (1 + BOUNCE_SCALE) + 0.03;
+// How far a plant can spread from its spot centre: the widest tree crown
+// (MAX_CROWN_REACH: seeded size, lean and lump corners included), grown by
+// the bounce, plus how far sway can tip the top of the tallest plant.
+const PLANT_REACH = MAX_CROWN_REACH * (1 + BOUNCE_SCALE) + PLANT_TOP * Math.sin(SWAY_TILT);
 const YAW_HALF_LIFE = 120; // ms, for arrow-key turns
 const KEY_TURN = Math.PI / 12; // 15 degrees per arrow press
 const DRAG_TURN = 0.0105; // radians per pixel
@@ -86,8 +89,11 @@ const SELECTED_RING: Record<Theme, { colour: number; opacity: number }> = {
   light: { colour: 0xffd34d, opacity: 0.8 },
   dark: { colour: 0xffcf4a, opacity: 0.65 },
 };
-const TEND_RING_SOFTNESS = 0.55; // times SELECTED_RING opacity
-const TREE_RING_SCALE = 1.4; // marker ring under a chosen tree: 0.24-0.38
+// Tend rings: about 0.6 across with a broad band, a little stronger than
+// half the selected ring, and lifted clear of the grass.
+const TEND_RING = { inner: 0.16, outer: 0.31, lift: 0.02 } as const;
+const TEND_RING_SOFTNESS = 0.8; // times SELECTED_RING opacity
+const TREE_RING_SCALE = 1.55; // marker ring around a chosen tree: 0.26-0.42, wider than a tend ring
 const SPROUT: Record<Theme, { stem: number; leaf: number }> = {
   light: { stem: 0x5a8c38, leaf: 0x7cc04c },
   dark: { stem: 0x55a33a, leaf: 0x74d052 },
@@ -128,7 +134,7 @@ type KeptEntry = {
 };
 
 type GrowingEntry = {
-  key: string; seed: number; spot: Spot; species: Species; stage: number; tend: boolean;
+  key: string; seed: number; spot: Spot; species: Species; stage: number;
   model: PlantModel; sway: Swayer;
   progress: number; outcome: Outcome | null;
   growth: number; growthTarget: number;
@@ -181,6 +187,8 @@ function buildMarker() {
     setMode(mode: "seed" | "tree") {
       seedling.visible = mode === "seed";
       ring.scale.setScalar(mode === "tree" ? TREE_RING_SCALE : 1);
+      // Lifted like the tend rings, so it reads under a crown.
+      ring.position.y = mode === "tree" ? TEND_RING.lift + 0.002 : 0.008;
     },
     setTheme(theme: Theme) {
       stemMat.color.setHex(SPROUT[theme].stem);
@@ -267,7 +275,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
   let free = new Set<string>();
   // Rings around the trees that can be tended (tendable mode), by plant id;
   // all share one geometry and material.
-  const tendGeo = new THREE.RingGeometry(0.28, 0.38, 28);
+  const tendGeo = new THREE.RingGeometry(TEND_RING.inner, TEND_RING.outer, 28);
   tendGeo.rotateX(-Math.PI / 2);
   const tendMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
   const tendRings = new Map<string, THREE.Mesh>();
@@ -516,7 +524,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
         const holder = holderAt(g.spot, model);
         const ending = g.outcome !== null && !reduced;
         growing = {
-          key, seed, spot: { ...g.spot }, species: g.species, stage: g.stage, tend, model,
+          key, seed, spot: { ...g.spot }, species: g.species, stage: g.stage, model,
           sway: { holder, ...swayFor(seed, false) },
           progress: g.progress, outcome: g.outcome,
           growth: ending ? g.progress : shown.growth, growthTarget: shown.growth,
@@ -526,7 +534,6 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
         };
         applyGrowing();
       } else {
-        growing.tend = tend;
         if (g.outcome !== growing.outcome) {
           if (isKept(g.outcome) && !reduced) growing.bouncePending = true;
           growing.outcome = g.outcome;
@@ -601,7 +608,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
         tendRings.set(id, r);
       }
       const e = kept.get(id)!;
-      r.position.copy(spotToWorld(e)).setY(0.006);
+      r.position.copy(spotToWorld(e)).setY(TEND_RING.lift);
       r.visible = e !== selTree;
     }
 

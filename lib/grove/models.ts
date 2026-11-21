@@ -784,22 +784,74 @@ function buildBerryBush(seed: number, theme: Theme): PlantModel {
 // Tree: one tree that grows through three stages, a session each.
 //
 // The whole tree is described by its age a in [0, 3]: 0 is the seedling,
-// 1 the sapling (thin trunk, three small leaf tufts), 2 the young tree (taller
-// trunk, one or two canopy lumps), 3 the mature tree (thick trunk, 3-5 lumps
-// about 1.1 across, 2-3 low branches). A model built for stage s plays ages
-// s - 1 to s as growth runs 0 to 1, so tending a tree carries on exactly
-// where the last session left it.
+// 1 the sapling (a thin, slightly crooked trunk with a small leaf tuft at the
+// tip and two more on short twigs lower down), 2 the young tree (taller,
+// straighter trunk with one short side branch, two overlapping canopy lumps
+// of different sizes a little off-centre), 3 the mature tree (thick trunk,
+// 3-5 lumps about 1.1 across, 2-3 low branches). A model built for stage s
+// plays ages s - 1 to s as growth runs 0 to 1, so tending a tree carries on
+// exactly where the last session left it.
 //
 // Every random choice is drawn up front in the same order for every stage, so
 // a seed is the same tree at every stage; each stage only builds the meshes
-// it can show. Height is not fitted: the trunk keyframes are set so the tree
-// stands at about 0.8 / 1.3 / 1.9, times a per-seed size shared by all stages.
-// The trunk eases within each stage, so growth settles at the end of one.
+// it can show (and the ones still fading out from the stage before). Height
+// is not fitted: the trunk keyframes are set so the tree stands at about
+// 0.8 / 1.3 / 1.9, times a per-seed size shared by all stages. The trunk
+// eases within each stage, so growth settles at the end of one.
 //
 // Only the sapling can wither; setWithered does nothing at stages 2 and 3.
 
 const TRUNK_HEIGHT = [0.03, 0.63, 0.92, 1.24] as const;
 const TRUNK_RADIUS = [0.012, 0.028, 0.055, 0.092] as const;
+
+// Ranges the plan draws from, as [lowest, spread]. MAX_CROWN_REACH is
+// derived from the same numbers.
+type Range = readonly [number, number];
+const TREE_SIZE: Range = [0.92, 0.14];
+const TREE_LEAN: Range = [0.03, 0.05]; // radians
+const CROWN_JITTER = 0.12; // lumpGeometry jitter for canopy lumps
+const YOUNG0_R3: Range = [0.4, 0.03];
+const YOUNG0_D3 = 0.04;
+const YOUNG0_LIFT = 0.1 + 0.17; // above the trunk top when mature
+const YOUNG1_R3: Range = [0.28, 0.03];
+const YOUNG1_D3: Range = [0.28, 0.04];
+const MATURE_D: Range = [0.24, 0.04];
+const MATURE_R: Range = [0.24, 0.04];
+const MATURE_DY: Range = [-0.12, 0.14];
+const BRANCH_AT: Range = [0.38, 0.2];
+const BRANCH_PITCH: Range = [0.85, 0.3];
+const BRANCH_LEN: Range = [0.26, 0.08];
+const BRANCH_R: Range = [0.09, 0.03];
+
+const hi = (r: Range) => r[0] + r[1];
+const draw = (r: Range, rand: () => number) => r[0] + rand() * r[1];
+
+/**
+ * The farthest any part of a tree reaches sideways from the base of its
+ * trunk, at any stage: the widest mature crown lump (corner jitter included)
+ * at the largest seeded size, pushed out by the greatest lean. A leaning
+ * point at height y moves at most y * sin(lean) sideways. Later stages always
+ * reach farther than earlier ones, so the mature crown bounds them all.
+ */
+export const MAX_CROWN_REACH = (() => {
+  const top = TRUNK_HEIGHT[3];
+  const j = 1 + CROWN_JITTER;
+  const s = Math.sin(hi(TREE_LEAN));
+  const out = (h: number, y: number) => h + y * s;
+  return hi(TREE_SIZE) * Math.max(
+    out(YOUNG0_D3 + hi(YOUNG0_R3) * j, top + YOUNG0_LIFT + hi(YOUNG0_R3) * j),
+    out(hi(YOUNG1_D3) + hi(YOUNG1_R3) * j, top + hi(YOUNG1_R3) * j),
+    out(hi(MATURE_D) + hi(MATURE_R) * j, top + hi(MATURE_DY) + hi(MATURE_R) * j),
+    out(hi(BRANCH_LEN) * Math.sin(hi(BRANCH_PITCH)) + hi(BRANCH_R) * j,
+      top * hi(BRANCH_AT) + hi(BRANCH_LEN) + hi(BRANCH_R) * j),
+  );
+})();
+
+// The sapling's crook: the top part of the trunk bends off by this much
+// (radians, the low end plus up to the spread), and straightens out while it
+// grows into a young tree.
+const SAPLING_BEND: Range = [0.18, 0.14];
+const SAPLING_KINK_AT = 0.58; // fraction of the trunk where it bends
 
 /** Eases between keyframes at whole ages. */
 function keyed(k: readonly number[], a: number) {
@@ -815,9 +867,9 @@ function buildTree(seed: number, theme: Theme, stageIn: number): PlantModel {
   const tr: Tracker = { geometries: [], materials: [] };
 
   // --- The plan, drawn in a fixed order whatever the stage. ---
-  const size = 0.92 + rand() * 0.14;
+  const size = draw(TREE_SIZE, rand);
   const yaw = rand() * Math.PI * 2;
-  const lean = 0.03 + rand() * 0.05;
+  const lean = draw(TREE_LEAN, rand);
   const tuftPlan = [0, 1, 2].map((i) => ({
     at: i === 0 ? 1 : 0.55 + rand() * 0.25, turn: rand() * Math.PI * 2,
     out: i === 0 ? 0 : 0.06 + rand() * 0.03, r: i === 0 ? 0.16 + rand() * 0.02 : 0.08 + rand() * 0.03,
@@ -825,23 +877,41 @@ function buildTree(seed: number, theme: Theme, stageIn: number): PlantModel {
   const youngCount = rand() < 0.5 ? 1 : 2;
   const youngPlan = [0, 1].map((i) => ({
     turn: rand() * Math.PI * 2, r2: i === 0 ? 0.32 + rand() * 0.03 : 0.2 + rand() * 0.03,
-    r3: i === 0 ? 0.4 + rand() * 0.03 : 0.28 + rand() * 0.03,
-    d2: i === 0 ? 0 : 0.16 + rand() * 0.04, d3: i === 0 ? 0.04 : 0.28 + rand() * 0.04, drop: i === 0 ? 0 : 0.1 + rand() * 0.05,
+    r3: i === 0 ? draw(YOUNG0_R3, rand) : draw(YOUNG1_R3, rand),
+    d2: i === 0 ? 0 : 0.16 + rand() * 0.04, d3: i === 0 ? YOUNG0_D3 : draw(YOUNG1_D3, rand), drop: i === 0 ? 0 : 0.1 + rand() * 0.05,
   }));
   const total = 3 + Math.floor(rand() * 3); // 3-5 lumps when mature
   const turn0 = rand() * Math.PI * 2;
   const maturePlan = [0, 1, 2, 3].map((i) => ({
-    turn: turn0 + (i / 4) * Math.PI * 2 + (rand() - 0.5) * 0.5, d: 0.24 + rand() * 0.04,
-    r: 0.24 + rand() * 0.04, dy: -0.12 + rand() * 0.14,
+    turn: turn0 + (i / 4) * Math.PI * 2 + (rand() - 0.5) * 0.5, d: draw(MATURE_D, rand),
+    r: draw(MATURE_R, rand), dy: draw(MATURE_DY, rand),
   }));
   const branchCount = 2 + Math.floor(rand() * 2); // 2-3
   const branchPlan = [0, 1, 2].map((i) => ({
-    at: 0.38 + rand() * 0.2, turn: (i / 3) * Math.PI * 2 + rand() * 1.2,
-    pitch: 0.85 + rand() * 0.3, len: 0.26 + rand() * 0.08, r: 0.09 + rand() * 0.03,
+    at: draw(BRANCH_AT, rand), turn: (i / 3) * Math.PI * 2 + rand() * 1.2,
+    pitch: draw(BRANCH_PITCH, rand), len: draw(BRANCH_LEN, rand), r: draw(BRANCH_R, rand),
   }));
   // Each lump's corners come from its own stream, so building one lump never
   // changes another.
   const lumpRand = (k: number) => mulberry32((seed ^ 0x7ee5) + k * 0x9e3779b1);
+
+  // Sapling and young-tree details come from numbers already drawn, so the
+  // plan (and the mature tree) is the same as before they were added.
+  const u = (tuftPlan[0].r - 0.16) / 0.02; // 0..1
+  const bend = SAPLING_BEND[0] + u * SAPLING_BEND[1];
+  const bendTurn = tuftPlan[0].turn;
+  // Side tufts: one low, one higher, on roughly opposite sides.
+  const sideTufts = [1, 2].map((i) => {
+    const p = tuftPlan[i];
+    const v = (p.at - 0.55) / 0.25; // 0..1
+    return {
+      at: (i === 1 ? 0.3 : 0.58) + v * 0.1,
+      turn: i === 1 ? p.turn : tuftPlan[1].turn + Math.PI * 0.8 + v * 0.5,
+      out: p.out * 2.3, r: p.r * 1.1,
+    };
+  });
+  // At the young stage the big lump sits a little off the trunk, away from the small one.
+  const young0Turn = youngPlan[1].turn + Math.PI;
 
   // --- The meshes this stage can show. ---
   const group = new THREE.Group();
@@ -865,31 +935,54 @@ function buildTree(seed: number, theme: Theme, stageIn: number): PlantModel {
   const trunk = new THREE.Mesh(prismGeometry(tr, 6, 0.55), barkMat);
   trunk.name = "trunk";
   tilt.add(trunk);
+  // The bent top of a sapling's trunk, straight and gone by the end of stage 2.
+  const leader = st <= 2 ? new THREE.Mesh(prismGeometry(tr, 6, 0.6), barkMat) : null;
+  if (leader) {
+    leader.rotation.order = "YXZ";
+    tilt.add(leader);
+  }
 
   type Lump = { mesh: THREE.Mesh };
   const lump = (k: number, kind: "ico0" | "ico1", mat: number): Lump => {
-    const mesh = new THREE.Mesh(lumpGeometry(tr, kind, lumpRand(k), 0.12), canopyMats[mat]);
+    const mesh = new THREE.Mesh(lumpGeometry(tr, kind, lumpRand(k), CROWN_JITTER), canopyMats[mat]);
     mesh.rotation.y = lumpRand(k + 100)() * Math.PI * 2;
     tilt.add(mesh);
     return { mesh };
   };
   const tufts = st <= 2 ? tuftPlan.map((p, i) => ({ p, ...lump(i, "ico0", i % 2) })) : [];
-  const young = st >= 2 ? youngPlan.slice(0, youngCount).map((p, i) => ({ p, ...lump(10 + i, "ico1", i % 2) })) : [];
+  const twigGeo = st <= 2 ? prismGeometry(tr, 5, 0.5) : null;
+  const twigs = twigGeo ? sideTufts.map(() => {
+    const m = new THREE.Mesh(twigGeo, barkMat);
+    tilt.add(m);
+    return m;
+  }) : [];
+  // Young trees always show two lumps; when the mature tree keeps only one
+  // of them, the other shrinks away while the mature lumps grow in.
+  const young = st >= 2 ? youngPlan.map((p, i) => ({ p, ...lump(10 + i, "ico1", i % 2) })) : [];
   const mature = st === 3 ? maturePlan.slice(0, total - youngCount).map((p, i) => ({ p, ...lump(20 + i, "ico1", (i + 1) % 2) })) : [];
-  const branchGeo = st === 3 ? prismGeometry(tr, 5, 0.5) : null;
-  const branches = st === 3 && branchGeo
-    ? branchPlan.slice(0, branchCount).map((p, i) => {
+  // The first low branch already shows, short, on the young tree.
+  const branchGeo = st >= 2 ? prismGeometry(tr, 5, 0.5) : null;
+  const branches = branchGeo
+    ? branchPlan.slice(0, st === 3 ? branchCount : 1).map((p, i) => {
         const pivot = new THREE.Group();
         pivot.rotation.order = "YXZ";
         pivot.rotation.set(0, p.turn, -p.pitch);
         tilt.add(pivot);
         const limb = new THREE.Mesh(branchGeo, barkMat);
         pivot.add(limb);
-        const leaves = new THREE.Mesh(lumpGeometry(tr, "ico0", lumpRand(30 + i), 0.12), canopyMats[i % 2]);
+        const leaves = new THREE.Mesh(lumpGeometry(tr, "ico0", lumpRand(30 + i), CROWN_JITTER), canopyMats[i % 2]);
         pivot.add(leaves);
         return { p, pivot, limb, leaves };
       })
     : [];
+
+  const UP = new THREE.Vector3(0, 1, 0);
+  const leaderEuler = new THREE.Euler(0, 0, 0, "YXZ");
+  const leaderDir = new THREE.Vector3();
+  const kink = new THREE.Vector3();
+  const topV = new THREE.Vector3();
+  const pt = new THREE.Vector3();
+  const twigDir = new THREE.Vector3();
 
   let growth = 1;
   let withered = 0;
@@ -899,26 +992,76 @@ function buildTree(seed: number, theme: Theme, stageIn: number): PlantModel {
     const T = keyed(TRUNK_HEIGHT, a);
     const R = keyed(TRUNK_RADIUS, a);
     tilt.rotation.z = -(lean + w * 0.4); // a withered sapling keels over
-    trunk.scale.set(R, tiny(T * (1 - 0.1 * w)), R);
-    const top = T * (1 - 0.1 * w);
+    const height = T * (1 - 0.1 * w);
 
-    // Sapling tufts grow in, then shrink away as the canopy takes over.
+    // The trunk: straight up to the kink, then the leader bends off. It
+    // straightens through stage 2, until the leader has no length left.
+    const straight = stage(a, 1.05, 1.9);
+    const lowH = height * lerp(SAPLING_KINK_AT, 1, straight);
+    const leadL = height - lowH;
+    trunk.scale.set(R, tiny(lowH), R);
+    kink.set(0, lowH, 0);
+    leaderEuler.set(0, bendTurn, -bend * (1 - straight));
+    leaderDir.copy(UP).applyEuler(leaderEuler);
+    if (leader) {
+      leader.position.copy(kink);
+      leader.rotation.copy(leaderEuler);
+      const r = R * 0.55 * (1 - straight * 0.5);
+      leader.scale.set(tiny(r), tiny(leadL), tiny(r));
+    }
+    /** A point a fraction f of the way up the trunk. */
+    const along = (f: number, into: THREE.Vector3) => {
+      const y = f * height;
+      return y <= lowH ? into.set(0, y, 0) : into.copy(kink).addScaledVector(leaderDir, y - lowH);
+    };
+    along(1, topV);
+    const top = topV.y;
+
+    // Sapling tufts grow in, then shrink away as the canopy takes over: a
+    // small one at the tip, two on twigs lower down.
     const tuft = stage(a, 0.25, 0.9) * (1 - stage(a, 1.55, 1.95));
-    for (const t of tufts) {
+    for (let i = 0; i < tufts.length; i++) {
+      const { p, mesh } = tufts[i];
       const g = tuft * (1 - 0.4 * w);
-      const y = t.p.at === 1 ? top + 0.05 * g : top * t.p.at;
-      t.mesh.position.set(Math.cos(t.p.turn) * t.p.out, y, Math.sin(t.p.turn) * t.p.out);
-      t.mesh.scale.set(tiny(t.p.r * g), tiny(t.p.r * g * 0.85), tiny(t.p.r * g));
+      if (i === 0) {
+        const r = p.r * 0.62;
+        mesh.position.copy(topV).addScaledVector(leaderDir, 0.04 * g);
+        mesh.scale.set(tiny(r * g), tiny(r * g * 0.85), tiny(r * g));
+        continue;
+      }
+      const s = sideTufts[i - 1];
+      along(s.at, pt);
+      twigDir.set(Math.cos(s.turn) * s.out, 0.07, Math.sin(s.turn) * s.out).multiplyScalar(g);
+      mesh.position.copy(pt).add(twigDir);
+      mesh.scale.set(tiny(s.r * g), tiny(s.r * g * 0.85), tiny(s.r * g));
+      const twig = twigs[i - 1];
+      const len = twigDir.length();
+      twig.position.copy(pt);
+      if (len > 1e-6) twig.quaternion.setFromUnitVectors(UP, twigDir.normalize());
+      const twigR = R * 0.3 * g;
+      twig.scale.set(tiny(twigR), tiny(len), tiny(twigR));
     }
     // Young lumps swell at the top (age 1-1.9) and keep growing when mature.
     const ripen = stage(a, 2, 2.9);
     for (let i = 0; i < young.length; i++) {
       const { p, mesh } = young[i];
       const g = i === 0 ? stage(a, 1, 1.75) : stage(a, 1.2, 1.9);
-      const r = p.r2 * g + (p.r3 - p.r2) * ripen;
-      const d = p.d2 * g + (p.d3 - p.d2) * ripen;
+      // A second lump the mature tree does not keep fades as the crown fills in.
+      const fade = i >= youngCount ? 1 - stage(a, 2, 2.6) : 1;
+      const r = (p.r2 * (i === 0 ? 0.88 : 1.1) * g + (p.r3 - p.r2 * (i === 0 ? 0.88 : 1.1)) * ripen) * fade;
+      let x: number, z: number;
+      if (i === 0) {
+        // Off the trunk towards young0Turn, moving to its mature place.
+        const off = 0.07 * g;
+        x = lerp(Math.cos(young0Turn) * off, Math.cos(p.turn) * p.d3, ripen);
+        z = lerp(Math.sin(young0Turn) * off, Math.sin(p.turn) * p.d3, ripen);
+      } else {
+        const d = p.d2 * g + (p.d3 - p.d2) * ripen;
+        x = Math.cos(p.turn) * d;
+        z = Math.sin(p.turn) * d;
+      }
       const y = top + (i === 0 ? 0.1 * g + 0.17 * ripen : -p.drop * g);
-      mesh.position.set(Math.cos(p.turn) * d, y, Math.sin(p.turn) * d);
+      mesh.position.set(topV.x + x, y, topV.z + z);
       mesh.scale.set(tiny(r), tiny(r * 0.85), tiny(r));
     }
     // Mature lumps spread the crown out to about 1.1 across.
@@ -929,9 +1072,12 @@ function buildTree(seed: number, theme: Theme, stageIn: number): PlantModel {
       mesh.position.set(Math.cos(p.turn) * d, top + p.dy * g, Math.sin(p.turn) * d);
       mesh.scale.set(tiny(p.r * g), tiny(p.r * g * 0.85), tiny(p.r * g));
     }
-    // Low branches reach out late, each ending in a small tuft.
-    const reach = stage(a, 2.1, 2.9);
-    for (const b of branches) {
+    // Low branches reach out late, each ending in a small tuft; the first
+    // already reaches halfway on the young tree.
+    const late = stage(a, 2.1, 2.9);
+    for (let i = 0; i < branches.length; i++) {
+      const b = branches[i];
+      const reach = i === 0 ? 0.5 * stage(a, 1.15, 1.8) + 0.5 * late : late;
       b.pivot.position.y = T * b.p.at;
       const len = b.p.len * reach;
       const r = R * 0.35 * (0.4 + 0.6 * reach);

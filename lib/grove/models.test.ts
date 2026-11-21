@@ -1,7 +1,7 @@
 import { test, expect, vi } from "vitest";
 import * as THREE from "three";
 import { SPECIES } from "./layout";
-import { MAX_PLANT_HEIGHT, buildPlant, fullHeight, spotToWorld, type PlantModel } from "./models";
+import { MAX_CROWN_REACH, MAX_PLANT_HEIGHT, buildPlant, fullHeight, spotToWorld, type PlantModel } from "./models";
 
 const height = (m: PlantModel) => new THREE.Box3().setFromObject(m.group).getSize(new THREE.Vector3()).y;
 test.each(SPECIES)("%s grows from a small sprout to its full height", (sp) => {
@@ -174,8 +174,10 @@ test.each(STAGED)("%s stage %i disposes what it made", (sp, st) => {
 // berry bush or tree show up as a diff here.
 const STAGED_BOX = {
   "BERRY_BUSH 1": { min: [-0.35924, -0.00089, -0.36221], max: [0.37294, 0.54291, 0.37278] },
-  "TREE 1": { min: [-0.21759, -0.00145, -0.15637], max: [0.17535, 0.8044, 0.17468] },
-  "TREE 2": { min: [-0.42175, -0.00285, -0.47984], max: [0.33509, 1.33142, 0.37385] },
+  // Re-recorded 2026-11-21 when the sapling got its crook and twigs and the
+  // young tree its side branch and second lump.
+  "TREE 1": { min: [-0.31112, -0.00145, -0.18546], max: [0.30382, 0.73574, 0.11297] },
+  "TREE 2": { min: [-0.40904, -0.00285, -0.51053], max: [0.28938, 1.29212, 0.39974] },
   "TREE 3": { min: [-0.51982, -0.00477, -0.69225], max: [0.52605, 1.89721, 0.53981] },
 } as const;
 test.each(STAGED)("%s stage %i keeps its recorded grown shape", (sp, st) => {
@@ -186,4 +188,36 @@ test.each(STAGED)("%s stage %i keeps its recorded grown shape", (sp, st) => {
   const size = want.getSize(new THREE.Vector3()).toArray();
   box.min.toArray().forEach((v, i) => expect(Math.abs(v - want.min.getComponent(i))).toBeLessThanOrEqual(0.01 * size[i]));
   box.max.toArray().forEach((v, i) => expect(Math.abs(v - want.max.getComponent(i))).toBeLessThanOrEqual(0.01 * size[i]));
+});
+
+const sideways = (m: PlantModel) => {
+  let far = 0; const v = new THREE.Vector3(); m.group.updateMatrixWorld(true);
+  m.group.traverse((o) => { const mesh = o as THREE.Mesh; if (!mesh.isMesh) return;
+    const pos = mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld); far = Math.max(far, Math.hypot(v.x, v.z)); } });
+  return far;
+};
+test("no tree reaches sideways past MAX_CROWN_REACH", () => {
+  for (let seed = 1; seed <= 50; seed++) {
+    const m = buildPlant("TREE", seed, "light", 3); m.setGrowth(1);
+    expect(sideways(m), `seed ${seed}`).toBeLessThanOrEqual(MAX_CROWN_REACH);
+    for (const st of [1, 2]) {
+      const y = buildPlant("TREE", seed, "light", st); y.setGrowth(1);
+      expect(sideways(y), `seed ${seed} stage ${st}`).toBeLessThanOrEqual(MAX_CROWN_REACH);
+    }
+  }
+  // A bound, not a guess: no looser than it needs to be for the framing.
+  expect(MAX_CROWN_REACH).toBeLessThan(0.95);
+});
+test("a sapling has three tufts at different heights, a young tree two lumps and a side branch", () => {
+  const lumpYs = (st: number) => { const m = buildPlant("TREE", 9, "light", st); m.setGrowth(1);
+    const ys: number[] = []; m.group.updateMatrixWorld(true);
+    m.group.traverse((o) => { const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && mesh.geometry.type === "IcosahedronGeometry" && mesh.scale.x > 0.02) ys.push(+mesh.getWorldPosition(new THREE.Vector3()).y.toFixed(3)); });
+    return ys; };
+  const sap = lumpYs(1);
+  expect(sap).toHaveLength(3);
+  expect(new Set(sap).size).toBe(3);
+  // two canopy lumps plus the branch's leaf tuft
+  expect(lumpYs(2)).toHaveLength(3);
 });

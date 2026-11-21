@@ -24,18 +24,20 @@ const labelClass = "text-[10px] font-semibold uppercase tracking-widest text-sla
  * checked against earlier plants staying put. Wildflowers and ferns
  * alternate; every fourth plant (from the third) is a tree, cycling through
  * stages 1, 2, 3; the fifth and twelfth are berry bushes. Every seventh plant
- * (from the sixth) is withered, and a withered tree is always a sapling.
+ * (from the sixth) is withered, and a withered tree is always a sapling;
+ * the tenth is a withered sapling, so the default list shows one.
  */
 function labPlants(count: number): GrovePlant[] {
   const out: GrovePlant[] = [];
   let trees = 0;
   for (let i = 0; i < count; i++) {
     const spot = defaultSpot(gridSize(i + 1), out)!;
-    const withered = i % 7 === 5;
+    const witheredSapling = i === 9;
+    const withered = i % 7 === 5 || witheredSapling;
     const species: Species =
-      i % 4 === 2 ? "TREE" : i === 4 || i === 11 ? "BERRY_BUSH" : i % 2 === 0 ? "WILDFLOWERS" : "FERN";
+      i % 4 === 2 || witheredSapling ? "TREE" : i === 4 || i === 11 ? "BERRY_BUSH" : i % 2 === 0 ? "WILDFLOWERS" : "FERN";
     const stage = species === "TREE" ? (withered ? 1 : (trees % MAX_STAGE) + 1) : 1;
-    if (species === "TREE") trees++;
+    if (species === "TREE" && !withered) trees++; // withered saplings don't use up a stage
     out.push({
       id: `lab-${i}`,
       species,
