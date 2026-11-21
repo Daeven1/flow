@@ -10,8 +10,8 @@
  */
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { SPECIES, freeSpots, gridSize, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
-import { buildIsland, buildPlant, fullHeight, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
+import { freeSpots, gridSize, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
+import { MAX_PLANT_HEIGHT, buildIsland, buildPlant, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
 import { WITHERED_GROWTH, approach, shownGrowth } from "@/lib/grove/tween";
 import type { Outcome } from "@/lib/focus/session";
 
@@ -39,7 +39,7 @@ const MAX_FILL = 0.98;
 const START_YAW = -Math.PI / 10;
 // Tallest a plant can reach: the tallest species, its +6 % seeded size
 // variation, the kept-outcome bounce and a little sway.
-const PLANT_TOP = Math.max(...SPECIES.map(fullHeight)) * 1.06 * (1 + 0.08) + 0.03;
+const PLANT_TOP = MAX_PLANT_HEIGHT * 1.06 * (1 + 0.08) + 0.03;
 const PLANT_REACH = 0.42; // how far a full plant spreads from its spot centre
 const GROWTH_HALF_LIFE = 600; // ms
 const DROOP_MS = 1500;

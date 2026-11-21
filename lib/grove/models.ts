@@ -32,10 +32,22 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-export function fullHeight(species: Species): number {
-  // TODO(Task 4): real heights for BERRY_BUSH and TREE; they borrow wildflowers for now.
-  return species === "FERN" ? 0.6 : 0.7;
+/** A tree's stage (1 sapling, 2 young, 3 mature); anything else rounds into range. */
+const treeStage = (s: number) => Math.min(3, Math.max(1, Math.round(Number.isFinite(s) ? s : 1)));
+const TREE_HEIGHTS = [0.8, 1.3, 1.9] as const;
+
+/** How tall a plant stands fully grown; `stage` only matters for TREE. */
+export function fullHeight(species: Species, stage = 1): number {
+  switch (species) {
+    case "FERN": return 0.6;
+    case "BERRY_BUSH": return 0.55;
+    case "TREE": return TREE_HEIGHTS[treeStage(stage) - 1];
+    default: return 0.7;
+  }
 }
+
+/** The tallest any plant gets (a mature tree), for camera framing. */
+export const MAX_PLANT_HEIGHT = Math.max(0.7, 0.6, 0.55, ...TREE_HEIGHTS);
 
 /** Spots are 1 unit apart; {x:-0.5,y:-0.5} is the origin; grid y is world z. */
 export function spotToWorld(spot: Spot): THREE.Vector3 {
@@ -61,6 +73,13 @@ const PALETTE = {
     sprout: 0x3f9a3a,
     sproutStem: 0x2f7d34,
     sproutTip: 0xb5e38a,
+    // Berry bush and tree: deeper than the grass, like the sprout.
+    bushLeaf: 0x3e8c40,
+    bushLeafDeep: 0x33783a,
+    berry: 0xd23a3a,
+    bark: 0x8a5a36,
+    canopy: 0x3a8a3c,
+    canopyDeep: 0x2e7536,
   },
   dark: {
     // Deeper, more saturated greens; blooms kept bright against Midnight Navy.
@@ -77,11 +96,19 @@ const PALETTE = {
     sprout: 0x4fc04a,
     sproutStem: 0x2c7a30,
     sproutTip: 0x9fe07a,
+    // Brighter and more saturated than the dark grass, like the sprout.
+    bushLeaf: 0x47b04c,
+    bushLeafDeep: 0x3a9842,
+    berry: 0xe85050,
+    bark: 0x9a6a44,
+    canopy: 0x45ad48,
+    canopyDeep: 0x35963f,
   },
 } as const;
 
 const STRAW = new THREE.Color(0xc4ad74);
 const DRIED_BLOOM = new THREE.Color(0x9c7b52);
+const DRIED_BERRY = new THREE.Color(0x6e3b2e);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -629,9 +656,315 @@ function buildFern(seed: number, theme: Theme): PlantModel {
   };
 }
 
-export function buildPlant(species: Species, seed: number, theme: Theme): PlantModel {
-  // TODO(Task 4): real BERRY_BUSH and TREE models; they borrow wildflowers for now.
-  return species === "FERN" ? buildFern(seed, theme) : buildWildflowers(seed, theme);
+// ---------------------------------------------------------------------------
+// Shared by the berry bush and the tree: a faceted lump of leaves. A
+// polyhedron whose corners are pushed in or out a little (the same amount for
+// every copy of a corner, so the faces stay closed), so no two lumps match.
+
+function lumpGeometry(tr: Tracker, kind: "dodeca" | "ico0" | "ico1", rand: () => number, jitter: number) {
+  const g = kind === "dodeca" ? new THREE.DodecahedronGeometry(1, 0) : new THREE.IcosahedronGeometry(1, kind === "ico1" ? 1 : 0);
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  const push = new Map<string, number>();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const k = `${x.toFixed(4)},${y.toFixed(4)},${z.toFixed(4)}`;
+    let s = push.get(k);
+    if (s === undefined) { s = 1 + (rand() - 0.5) * 2 * jitter; push.set(k, s); }
+    pos.setXYZ(i, x * s, y * s, z * s);
+  }
+  g.computeVertexNormals();
+  return track(tr, g);
+}
+
+// ---------------------------------------------------------------------------
+// Berry bush: a rounded clump of 3-5 faceted leaf masses, a big one in the
+// middle and smaller ones leaning on it, dotted late with 6-10 red berries.
+//
+// After the sprout, the masses swell up out of the ground one after another
+// (0.1-0.8), the middle one first; the berries ripen last, from 0.7 to 1, and
+// are hidden before that. About 280 triangles with the sprout.
+
+function buildBerryBush(seed: number, theme: Theme): PlantModel {
+  const rand = mulberry32(seed);
+  const pal = PALETTE[theme];
+  const tr: Tracker = { geometries: [], materials: [] };
+
+  const group = new THREE.Group();
+  group.name = "berry-bush";
+  const body = new THREE.Group();
+  group.add(body);
+  const sprout = buildSprout(tr, group, seed, pal);
+
+  const leafMats = [material(tr, pal.bushLeaf), material(tr, pal.bushLeafDeep)];
+  const berryMat = material(tr, pal.berry);
+  const berryGeo = track(tr, new THREE.OctahedronGeometry(1, 0));
+  const shifts: ColourShift[] = [
+    { mat: leafMats[0], healthy: new THREE.Color(pal.bushLeaf), dried: STRAW },
+    { mat: leafMats[1], healthy: new THREE.Color(pal.bushLeafDeep), dried: STRAW },
+    { mat: berryMat, healthy: new THREE.Color(pal.berry), dried: DRIED_BERRY },
+  ];
+
+  type Mass = { mesh: THREE.Mesh; x: number; y: number; z: number; r: number; from: number; to: number; g: number };
+  const masses: Mass[] = [];
+  const count = 3 + Math.floor(rand() * 3); // 3-5
+  const turn = rand() * Math.PI * 2;
+  for (let i = 0; i < count; i++) {
+    const mesh = new THREE.Mesh(lumpGeometry(tr, "dodeca", rand, 0.14), leafMats[i % 2]);
+    mesh.rotation.y = rand() * Math.PI * 2; // about y only, so its box stays honest
+    body.add(mesh);
+    if (i === 0) {
+      const r = 0.22 + rand() * 0.03;
+      masses.push({ mesh, x: 0, y: r * 1.1, z: 0, r, from: 0.1, to: 0.55, g: 0 });
+    } else {
+      const a = turn + (i / (count - 1)) * Math.PI * 2 + (rand() - 0.5) * 0.6;
+      const d = 0.1 + rand() * 0.04;
+      const r = 0.13 + rand() * 0.03;
+      masses.push({ mesh, x: Math.cos(a) * d, y: r * 0.95, z: Math.sin(a) * d, r, from: 0.15 + i * 0.08, to: 0.5 + i * 0.07, g: 0 });
+    }
+  }
+
+  // Berries sit on the upper and outer faces of the masses.
+  type Berry = { mesh: THREE.Mesh; mass: Mass; dx: number; dy: number; dz: number; size: number; from: number; to: number };
+  const berries: Berry[] = [];
+  const berryCount = 6 + Math.floor(rand() * 5); // 6-10
+  for (let k = 0; k < berryCount; k++) {
+    const mass = masses[k % count];
+    const theta = rand() * Math.PI * 2;
+    const phi = 0.3 + rand() * 0.9; // from the top, round to the side
+    const mesh = new THREE.Mesh(berryGeo, berryMat);
+    mesh.name = "berry";
+    body.add(mesh);
+    const at = k / berryCount;
+    berries.push({
+      mesh, mass, dx: Math.sin(phi) * Math.cos(theta), dy: Math.cos(phi), dz: Math.sin(phi) * Math.sin(theta),
+      size: 0.034 + rand() * 0.01, from: 0.7 + at * 0.15, to: 0.85 + at * 0.14,
+    });
+  }
+
+  let growth = 1;
+  let withered = 0;
+  const apply = () => {
+    const w = withered;
+    for (const m of masses) {
+      // Each mass swells up out of the ground; withered ones slump.
+      m.g = stage(growth, m.from, m.to);
+      const r = m.r * m.g;
+      m.mesh.position.set(m.x * (0.6 + 0.4 * m.g), m.y * m.g * (1 - 0.3 * w), m.z * (0.6 + 0.4 * m.g));
+      m.mesh.scale.set(tiny(r * (1 + 0.08 * w)), tiny(r * 0.9 * (1 - 0.35 * w)), tiny(r * (1 + 0.08 * w)));
+    }
+    for (const b of berries) {
+      const ripe = stage(growth, b.from, b.to);
+      b.mesh.visible = ripe > 0;
+      const m = b.mass;
+      const r = m.r * m.g * 0.92;
+      b.mesh.position.set(
+        m.mesh.position.x + b.dx * r * (1 + 0.08 * w),
+        m.mesh.position.y + b.dy * r * 0.9 * (1 - 0.35 * w),
+        m.mesh.position.z + b.dz * r * (1 + 0.08 * w),
+      );
+      b.mesh.scale.setScalar(tiny(b.size * ripe * (1 - 0.35 * w)));
+    }
+    applyColours(shifts, w);
+    sprout.apply(growth, w);
+  };
+
+  apply();
+  fitHeight(group, body, fullHeight("BERRY_BUSH") * (0.92 + rand() * 0.14));
+  fitSprout(body, sprout, (g) => { growth = g; apply(); });
+
+  return {
+    group,
+    setGrowth(t) { growth = clamp01(t); apply(); },
+    setWithered(v) { withered = clamp01(v); apply(); },
+    dispose: disposer(tr),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tree: one tree that grows through three stages, a session each.
+//
+// The whole tree is described by its age a in [0, 3]: 0 is the seedling,
+// 1 the sapling (thin trunk, three small leaf tufts), 2 the young tree (taller
+// trunk, one or two canopy lumps), 3 the mature tree (thick trunk, 3-5 lumps
+// about 1.1 across, 2-3 low branches). A model built for stage s plays ages
+// s - 1 to s as growth runs 0 to 1, so tending a tree carries on exactly
+// where the last session left it.
+//
+// Every random choice is drawn up front in the same order for every stage, so
+// a seed is the same tree at every stage; each stage only builds the meshes
+// it can show. Height is not fitted: the trunk keyframes are set so the tree
+// stands at about 0.8 / 1.3 / 1.9, times a per-seed size shared by all stages.
+// The trunk eases within each stage, so growth settles at the end of one.
+//
+// Only the sapling can wither; setWithered does nothing at stages 2 and 3.
+
+const TRUNK_HEIGHT = [0.03, 0.63, 0.92, 1.24] as const;
+const TRUNK_RADIUS = [0.012, 0.028, 0.055, 0.092] as const;
+
+/** Eases between keyframes at whole ages. */
+function keyed(k: readonly number[], a: number) {
+  const i = Math.min(k.length - 2, Math.max(0, Math.floor(a)));
+  const x = clamp01(a - i);
+  return k[i] + (k[i + 1] - k[i]) * x * x * (3 - 2 * x);
+}
+
+function buildTree(seed: number, theme: Theme, stageIn: number): PlantModel {
+  const st = treeStage(stageIn);
+  const rand = mulberry32(seed);
+  const pal = PALETTE[theme];
+  const tr: Tracker = { geometries: [], materials: [] };
+
+  // --- The plan, drawn in a fixed order whatever the stage. ---
+  const size = 0.92 + rand() * 0.14;
+  const yaw = rand() * Math.PI * 2;
+  const lean = 0.03 + rand() * 0.05;
+  const tuftPlan = [0, 1, 2].map((i) => ({
+    at: i === 0 ? 1 : 0.55 + rand() * 0.25, turn: rand() * Math.PI * 2,
+    out: i === 0 ? 0 : 0.06 + rand() * 0.03, r: i === 0 ? 0.16 + rand() * 0.02 : 0.08 + rand() * 0.03,
+  }));
+  const youngCount = rand() < 0.5 ? 1 : 2;
+  const youngPlan = [0, 1].map((i) => ({
+    turn: rand() * Math.PI * 2, r2: i === 0 ? 0.32 + rand() * 0.03 : 0.2 + rand() * 0.03,
+    r3: i === 0 ? 0.4 + rand() * 0.03 : 0.28 + rand() * 0.03,
+    d2: i === 0 ? 0 : 0.16 + rand() * 0.04, d3: i === 0 ? 0.04 : 0.28 + rand() * 0.04, drop: i === 0 ? 0 : 0.1 + rand() * 0.05,
+  }));
+  const total = 3 + Math.floor(rand() * 3); // 3-5 lumps when mature
+  const turn0 = rand() * Math.PI * 2;
+  const maturePlan = [0, 1, 2, 3].map((i) => ({
+    turn: turn0 + (i / 4) * Math.PI * 2 + (rand() - 0.5) * 0.5, d: 0.24 + rand() * 0.04,
+    r: 0.24 + rand() * 0.04, dy: -0.12 + rand() * 0.14,
+  }));
+  const branchCount = 2 + Math.floor(rand() * 2); // 2-3
+  const branchPlan = [0, 1, 2].map((i) => ({
+    at: 0.38 + rand() * 0.2, turn: (i / 3) * Math.PI * 2 + rand() * 1.2,
+    pitch: 0.85 + rand() * 0.3, len: 0.26 + rand() * 0.08, r: 0.09 + rand() * 0.03,
+  }));
+  // Each lump's corners come from its own stream, so building one lump never
+  // changes another.
+  const lumpRand = (k: number) => mulberry32((seed ^ 0x7ee5) + k * 0x9e3779b1);
+
+  // --- The meshes this stage can show. ---
+  const group = new THREE.Group();
+  group.name = "tree";
+  const body = new THREE.Group();
+  body.scale.setScalar(size);
+  group.add(body);
+  const sprout = st === 1 ? buildSprout(tr, group, seed, pal) : null;
+  const tilt = new THREE.Group();
+  tilt.rotation.order = "YXZ";
+  tilt.rotation.y = yaw;
+  body.add(tilt);
+
+  const barkMat = material(tr, pal.bark);
+  const canopyMats = [material(tr, pal.canopy), material(tr, pal.canopyDeep)];
+  const shifts: ColourShift[] = [
+    { mat: barkMat, healthy: new THREE.Color(pal.bark), dried: STRAW },
+    { mat: canopyMats[0], healthy: new THREE.Color(pal.canopy), dried: STRAW },
+    { mat: canopyMats[1], healthy: new THREE.Color(pal.canopyDeep), dried: STRAW },
+  ];
+  const trunk = new THREE.Mesh(prismGeometry(tr, 6, 0.55), barkMat);
+  trunk.name = "trunk";
+  tilt.add(trunk);
+
+  type Lump = { mesh: THREE.Mesh };
+  const lump = (k: number, kind: "ico0" | "ico1", mat: number): Lump => {
+    const mesh = new THREE.Mesh(lumpGeometry(tr, kind, lumpRand(k), 0.12), canopyMats[mat]);
+    mesh.rotation.y = lumpRand(k + 100)() * Math.PI * 2;
+    tilt.add(mesh);
+    return { mesh };
+  };
+  const tufts = st <= 2 ? tuftPlan.map((p, i) => ({ p, ...lump(i, "ico0", i % 2) })) : [];
+  const young = st >= 2 ? youngPlan.slice(0, youngCount).map((p, i) => ({ p, ...lump(10 + i, "ico1", i % 2) })) : [];
+  const mature = st === 3 ? maturePlan.slice(0, total - youngCount).map((p, i) => ({ p, ...lump(20 + i, "ico1", (i + 1) % 2) })) : [];
+  const branchGeo = st === 3 ? prismGeometry(tr, 5, 0.5) : null;
+  const branches = st === 3 && branchGeo
+    ? branchPlan.slice(0, branchCount).map((p, i) => {
+        const pivot = new THREE.Group();
+        pivot.rotation.order = "YXZ";
+        pivot.rotation.set(0, p.turn, -p.pitch);
+        tilt.add(pivot);
+        const limb = new THREE.Mesh(branchGeo, barkMat);
+        pivot.add(limb);
+        const leaves = new THREE.Mesh(lumpGeometry(tr, "ico0", lumpRand(30 + i), 0.12), canopyMats[i % 2]);
+        pivot.add(leaves);
+        return { p, pivot, limb, leaves };
+      })
+    : [];
+
+  let growth = 1;
+  let withered = 0;
+  const apply = () => {
+    const a = st - 1 + growth;
+    const w = st === 1 ? withered : 0;
+    const T = keyed(TRUNK_HEIGHT, a);
+    const R = keyed(TRUNK_RADIUS, a);
+    tilt.rotation.z = -(lean + w * 0.4); // a withered sapling keels over
+    trunk.scale.set(R, tiny(T * (1 - 0.1 * w)), R);
+    const top = T * (1 - 0.1 * w);
+
+    // Sapling tufts grow in, then shrink away as the canopy takes over.
+    const tuft = stage(a, 0.25, 0.9) * (1 - stage(a, 1.55, 1.95));
+    for (const t of tufts) {
+      const g = tuft * (1 - 0.4 * w);
+      const y = t.p.at === 1 ? top + 0.05 * g : top * t.p.at;
+      t.mesh.position.set(Math.cos(t.p.turn) * t.p.out, y, Math.sin(t.p.turn) * t.p.out);
+      t.mesh.scale.set(tiny(t.p.r * g), tiny(t.p.r * g * 0.85), tiny(t.p.r * g));
+    }
+    // Young lumps swell at the top (age 1-1.9) and keep growing when mature.
+    const ripen = stage(a, 2, 2.9);
+    for (let i = 0; i < young.length; i++) {
+      const { p, mesh } = young[i];
+      const g = i === 0 ? stage(a, 1, 1.75) : stage(a, 1.2, 1.9);
+      const r = p.r2 * g + (p.r3 - p.r2) * ripen;
+      const d = p.d2 * g + (p.d3 - p.d2) * ripen;
+      const y = top + (i === 0 ? 0.1 * g + 0.17 * ripen : -p.drop * g);
+      mesh.position.set(Math.cos(p.turn) * d, y, Math.sin(p.turn) * d);
+      mesh.scale.set(tiny(r), tiny(r * 0.85), tiny(r));
+    }
+    // Mature lumps spread the crown out to about 1.1 across.
+    for (let i = 0; i < mature.length; i++) {
+      const { p, mesh } = mature[i];
+      const g = stage(a, 2 + i * 0.1, 2.6 + i * 0.1);
+      const d = p.d * (0.5 + 0.5 * g);
+      mesh.position.set(Math.cos(p.turn) * d, top + p.dy * g, Math.sin(p.turn) * d);
+      mesh.scale.set(tiny(p.r * g), tiny(p.r * g * 0.85), tiny(p.r * g));
+    }
+    // Low branches reach out late, each ending in a small tuft.
+    const reach = stage(a, 2.1, 2.9);
+    for (const b of branches) {
+      b.pivot.position.y = T * b.p.at;
+      const len = b.p.len * reach;
+      const r = R * 0.35 * (0.4 + 0.6 * reach);
+      b.limb.scale.set(r, tiny(len), r);
+      b.leaves.position.y = len;
+      b.leaves.scale.set(tiny(b.p.r * reach), tiny(b.p.r * reach * 0.8), tiny(b.p.r * reach));
+    }
+    applyColours(shifts, w);
+    sprout?.apply(growth, w);
+  };
+
+  apply();
+  if (sprout) fitSprout(body, sprout, (g) => { growth = g; apply(); });
+
+  return {
+    group,
+    setGrowth(t) { growth = clamp01(t); apply(); },
+    setWithered(v) {
+      if (st !== 1) return; // only a sapling can be lost
+      withered = clamp01(v); apply();
+    },
+    dispose: disposer(tr),
+  };
+}
+
+/** `stage` only matters for TREE (1 sapling, 2 young, 3 mature). */
+export function buildPlant(species: Species, seed: number, theme: Theme, stage = 1): PlantModel {
+  switch (species) {
+    case "FERN": return buildFern(seed, theme);
+    case "BERRY_BUSH": return buildBerryBush(seed, theme);
+    case "TREE": return buildTree(seed, theme, stage);
+    default: return buildWildflowers(seed, theme);
+  }
 }
 
 // ---------------------------------------------------------------------------
