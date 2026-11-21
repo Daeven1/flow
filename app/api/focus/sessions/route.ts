@@ -4,21 +4,23 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import { parseStart } from "@/lib/focus/validate";
-import { MAX_STAGE } from "@/lib/grove/layout";
+import { isSpecies, type GrovePlant } from "@/lib/grove/layout";
+import { resolvePlant } from "@/lib/grove/planting";
 import { costOf } from "@/lib/grove/seeds";
 import { seedBalance } from "@/lib/grove/seedStore";
 
-type StoredPlant = {
-  plantSpecies: string | null;
-  plantX: number | null;
-  plantY: number | null;
-  plantCost: number;
-  tendPlantId: string | null;
-};
-
-const NO_PLANT: StoredPlant = {
-  plantSpecies: null, plantX: null, plantY: null, plantCost: 0, tendPlantId: null,
-};
+/** The user's plant a tend names, shaped for canTend, or null when missing. */
+async function findTree(userId: string, id: string): Promise<GrovePlant | null> {
+  const row = await prisma.grovePlant.findFirst({ where: { id, userId } });
+  if (!row || !isSpecies(row.species)) return null;
+  return {
+    id: row.id, species: row.species, x: row.x, y: row.y,
+    status: row.status === "ALIVE" ? "ALIVE" : "WITHERED",
+    plantedAt: row.plantedAt.toISOString(),
+    witheredAt: row.witheredAt?.toISOString() ?? null,
+    stage: row.stage,
+  };
+}
 
 export async function POST(req: Request) {
   const userId = await getUser();
@@ -29,46 +31,38 @@ export async function POST(req: Request) {
   if (!input) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
   const choice = input.plant;
+  const base = {
+    userId,
+    startedAt: input.startedAt,
+    plannedMinutes: input.plannedMinutes,
+    rule: input.rule,
+    taskIds: JSON.stringify(input.taskIds),
+  };
 
-  const { session, plantAccepted } = await prisma.$transaction(async (tx) => {
-    // One paid start at a time per user, so two at once cannot spend the same seeds.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
-
-    let stored: StoredPlant = NO_PLANT;
-    if (choice?.tendId !== undefined) {
-      // Tending: only a living tree of this user's that can still grow.
-      const tree = await tx.grovePlant.findFirst({
-        where: { id: choice.tendId, userId },
-        select: { id: true, species: true, x: true, y: true, status: true, stage: true },
+  try {
+    if (choice && costOf(choice) > 0) {
+      // Buying: check the balance and store the session together, one paid
+      // start at a time per user, so two at once cannot spend the same seeds.
+      const result = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+        const { accepted, ...plant } = resolvePlant(choice, null, await seedBalance(tx, userId));
+        const session = await tx.focusSession.create({ data: { ...base, ...plant } });
+        return { id: session.id, plantAccepted: accepted };
       });
-      if (tree && tree.species === "TREE" && tree.status === "ALIVE" && tree.stage < MAX_STAGE) {
-        stored = {
-          plantSpecies: tree.species, plantX: tree.x, plantY: tree.y,
-          plantCost: 0, tendPlantId: tree.id,
-        };
-      }
-    } else if (choice) {
-      const cost = costOf(choice);
-      if (cost === 0 || (await seedBalance(tx, userId)) >= cost) {
-        stored = {
-          plantSpecies: choice.species, plantX: choice.x, plantY: choice.y,
-          plantCost: cost, tendPlantId: null,
-        };
-      }
+      return NextResponse.json(result, { status: 201 });
     }
 
-    const session = await tx.focusSession.create({
-      data: {
-        userId,
-        startedAt: input.startedAt,
-        plannedMinutes: input.plannedMinutes,
-        rule: input.rule,
-        taskIds: JSON.stringify(input.taskIds),
-        ...stored,
-      },
-    });
-    return { session, plantAccepted: choice === null || stored.plantSpecies !== null };
-  });
+    const tree = choice?.tendId !== undefined ? await findTree(userId, choice.tendId) : null;
+    const { accepted, ...plant } = resolvePlant(choice, tree, null);
+    const session = await prisma.focusSession.create({ data: { ...base, ...plant } });
+    return NextResponse.json({ id: session.id, plantAccepted: accepted }, { status: 201 });
+  } catch (e) {
+    // A session must always start: fall back to one with no plant (spends nothing).
+    console.error("focus session start: plant step failed, starting without a plant", e);
+  }
 
-  return NextResponse.json({ id: session.id, plantAccepted }, { status: 201 });
+  const session = await prisma.focusSession.create({
+    data: { ...base, plantSpecies: null, plantX: null, plantY: null, plantCost: 0, tendPlantId: null },
+  });
+  return NextResponse.json({ id: session.id, plantAccepted: choice === null }, { status: 201 });
 }

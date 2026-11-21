@@ -1,6 +1,7 @@
 import type { Outcome } from "@/lib/focus/session";
-import { gridSize, isSpecies, nearestFree } from "./layout";
-import type { PlantStatus, Spot } from "./layout";
+import { canTend, gridSize, isSpecies, nearestFree } from "./layout";
+import type { GrovePlant, PlantChoice, PlantStatus, Spot } from "./layout";
+import { costOf } from "./seeds";
 
 export type PlantingSession = {
   id: string;
@@ -45,5 +46,43 @@ export function planFor(
     status: alive ? "ALIVE" : "WITHERED",
     plantedAt: endedAt,
     witheredAt: alive ? null : endedAt,
+  };
+}
+
+export type ResolvedPlant = {
+  plantSpecies: string | null;
+  plantX: number | null;
+  plantY: number | null;
+  plantCost: number;
+  tendPlantId: string | null;
+  /** False only when a plant (or tend) was asked for and dropped. */
+  accepted: boolean;
+};
+
+const NO_PLANT = { plantSpecies: null, plantX: null, plantY: null, plantCost: 0, tendPlantId: null };
+
+/**
+ * What a session start stores for the plant choice. tree: the user's plant the
+ * tend names (null when missing or not the user's). balance: the user's seeds,
+ * or null when not looked up (then any paid plant is dropped).
+ */
+export function resolvePlant(
+  choice: PlantChoice | null,
+  tree: GrovePlant | null,
+  balance: number | null,
+): ResolvedPlant {
+  if (!choice) return { ...NO_PLANT, accepted: true };
+  if (choice.tendId !== undefined) {
+    if (!tree || tree.id !== choice.tendId || !canTend(tree)) return { ...NO_PLANT, accepted: false };
+    return {
+      plantSpecies: tree.species, plantX: tree.x, plantY: tree.y,
+      plantCost: 0, tendPlantId: tree.id, accepted: true,
+    };
+  }
+  const cost = costOf(choice);
+  if (cost > 0 && (balance === null || balance < cost)) return { ...NO_PLANT, accepted: false };
+  return {
+    plantSpecies: choice.species, plantX: choice.x, plantY: choice.y,
+    plantCost: cost, tendPlantId: null, accepted: true,
   };
 }

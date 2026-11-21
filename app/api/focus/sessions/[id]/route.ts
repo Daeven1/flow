@@ -44,21 +44,24 @@ export async function PATCH(
       });
     }
 
-    // Only the request that won the claim plants (never for a tend). skipDuplicates (ON CONFLICT
-    // DO NOTHING on sessionId) keeps a duplicate from aborting the transaction.
-    const now = new Date();
-    const existing = await tx.grovePlant.findMany({
-      where: { userId },
-      select: { x: true, y: true, status: true, witheredAt: true },
-    });
-    const occupied = existing.filter(
-      (p) =>
-        p.status === "ALIVE" ||
-        (p.witheredAt !== null && witherExpiry(p.witheredAt, input.tz) > now),
-    );
-    const plant = planFor(session, input.outcome, input.endedAt, occupied);
-    if (plant) {
-      await tx.grovePlant.createMany({ data: [{ ...plant, userId }], skipDuplicates: true });
+    // Only the request that won the claim plants (never for a tend).
+    // skipDuplicates (ON CONFLICT DO NOTHING on sessionId) keeps a duplicate
+    // from aborting the transaction.
+    if (session.tendPlantId === null) {
+      const now = new Date();
+      const existing = await tx.grovePlant.findMany({
+        where: { userId },
+        select: { x: true, y: true, status: true, witheredAt: true },
+      });
+      const occupied = existing.filter(
+        (p) =>
+          p.status === "ALIVE" ||
+          (p.witheredAt !== null && witherExpiry(p.witheredAt, input.tz) > now),
+      );
+      const plant = planFor(session, input.outcome, input.endedAt, occupied);
+      if (plant) {
+        await tx.grovePlant.createMany({ data: [{ ...plant, userId }], skipDuplicates: true });
+      }
     }
 
     if (!logTime) return;
