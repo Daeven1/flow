@@ -44,5 +44,12 @@ export async function GET(req: Request) {
       stage: p.stage,
     }));
 
-  return NextResponse.json({ plants, seeds: await seedBalance(prisma, userId) });
+  // A seed error never stops the grove loading: leave seeds out (the client reads that as unknown).
+  let seeds: number | undefined;
+  try {
+    seeds = await seedBalance(prisma, userId);
+  } catch (e) {
+    console.error("grove: seed balance failed", e);
+  }
+  return NextResponse.json(seeds === undefined ? { plants } : { plants, seeds });
 }

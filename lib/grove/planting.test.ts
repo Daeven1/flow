@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { planFor, resolvePlant } from "./planting";
+import { fallbackPlant, planFor, replayedStart, resolvePlant } from "./planting";
 import { spots } from "./layout";
 import type { GrovePlant } from "./layout";
 
@@ -73,4 +73,27 @@ test.each([
   ["missing", null],
 ])("resolvePlant: a tend of a %s tree is dropped", (_name, tree) => {
   expect(resolvePlant({ species: "TREE", x: 0, y: 0, tendId: "t1" }, tree, 10)).toEqual({ ...NONE, accepted: false });
+});
+
+test("replayedStart: a stored plant was accepted", () => {
+  expect(replayedStart({ id: "s1", plantSpecies: "TREE" }, { species: "TREE", x: 0, y: 0 })).toEqual({ id: "s1", plantAccepted: true });
+  expect(replayedStart({ id: "s1", plantSpecies: "FERN" }, null)).toEqual({ id: "s1", plantAccepted: true });
+});
+test("replayedStart: no stored plant is accepted only when none was asked for", () => {
+  expect(replayedStart({ id: "s2", plantSpecies: null }, null)).toEqual({ id: "s2", plantAccepted: true });
+  expect(replayedStart({ id: "s2", plantSpecies: null }, { species: "BERRY_BUSH", x: 0, y: 0 })).toEqual({ id: "s2", plantAccepted: false });
+  expect(replayedStart({ id: "s2", plantSpecies: null }, { species: "TREE", x: 0, y: 0, tendId: "t1" })).toEqual({ id: "s2", plantAccepted: false });
+});
+test("fallbackPlant: no choice stores nothing and is accepted", () => {
+  expect(fallbackPlant(null)).toEqual({ ...NONE, accepted: true });
+});
+test("fallbackPlant: a free new plant is kept and costs nothing", () => {
+  expect(fallbackPlant({ species: "WILDFLOWERS", x: 1, y: -1 })).toEqual(
+    { plantSpecies: "WILDFLOWERS", plantX: 1, plantY: -1, plantCost: 0, tendPlantId: null, accepted: true });
+  expect(fallbackPlant({ species: "FERN", x: 0, y: 0 }).accepted).toBe(true);
+});
+test("fallbackPlant: a paid plant or a tend is dropped with reason ERROR", () => {
+  expect(fallbackPlant({ species: "TREE", x: 0, y: 0 })).toEqual({ ...NONE, accepted: false, dropReason: "ERROR" });
+  expect(fallbackPlant({ species: "BERRY_BUSH", x: 0, y: 0 })).toEqual({ ...NONE, accepted: false, dropReason: "ERROR" });
+  expect(fallbackPlant({ species: "TREE", x: 0, y: 0, tendId: "t1" })).toEqual({ ...NONE, accepted: false, dropReason: "ERROR" });
 });

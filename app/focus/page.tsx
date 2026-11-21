@@ -245,7 +245,9 @@ export default function FocusPage() {
             <p className="min-h-[20px] text-sm text-slate-600 dark:text-zinc-400">
               {grove.status === "loaded" &&
                 (groveCount === 0
-                  ? "Your grove is ready for its first plant."
+                  ? `Your grove is ready for its first plant.${
+                      grove.seeds === null ? "" : ` · ${seedCount(grove.seeds)}`
+                    }`
                   : `${plantCount(groveCount)} in your grove${
                       grove.seeds === null ? "" : ` · ${seedCount(grove.seeds)}`
                     }`)}

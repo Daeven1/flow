@@ -21,13 +21,21 @@ export async function PATCH(
   const body = await req.json();
   const data: Record<string, unknown> = {};
 
+  // Read the task's done state before the update so only a real flip earns or
+  // loses a seed, and only a real flip moves doneAt
+  const before =
+    "done" in body
+      ? await prisma.task.findUnique({ where: { id, userId }, select: { done: true, doneAt: true } })
+      : null;
+
   if ("pinned" in body) data.pinned = Boolean(body.pinned);
   if ("schedulePinned" in body) data.schedulePinned = Boolean(body.schedulePinned);
   if ("showInRegular" in body) data.showInRegular = Boolean(body.showInRegular);
   if ("sortOrder" in body) data.sortOrder = Number(body.sortOrder);
   if ("done" in body) {
     data.done = body.done;
-    data.doneAt = body.done ? new Date() : null;
+    // Sending done:true to a task that is already done leaves its doneAt as is
+    if (!before || Boolean(body.done) !== before.done) data.doneAt = body.done ? new Date() : null;
   }
   if ("name" in body) data.name = body.name;
   if ("sprint" in body) data.sprint = Number(body.sprint);
@@ -68,12 +76,6 @@ export async function PATCH(
   if ("scheduledDate" in body) {
     data.scheduledDate = body.scheduledDate ? new Date(body.scheduledDate) : null;
   }
-
-  // Read the task's done state before the update so only a real flip earns or loses a seed
-  const before =
-    "done" in body
-      ? await prisma.task.findUnique({ where: { id, userId }, select: { done: true, doneAt: true } })
-      : null;
 
   const task = await prisma.task.update({
     where: { id, userId },

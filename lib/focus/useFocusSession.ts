@@ -7,10 +7,11 @@ import {
   segments,
   type FocusRule,
   type PlannedMinutes,
+  type PlantDropped,
   type SavedPlant,
   type SavedSession,
 } from "./session";
-import { PENDING_KEY, STORAGE_KEY, parsePending, parseSaved, shouldRetry } from "./storage";
+import { PENDING_KEY, STORAGE_KEY, droppedReason, parsePending, parseSaved, shouldRetry } from "./storage";
 
 export type FocusSessionApi = {
   ready: boolean; // false until localStorage has been read
@@ -62,7 +63,7 @@ type PushResult = {
   startRejected: boolean; // the start POST got a 4xx and can never succeed
   endDone: boolean; // the end no longer needs sending (sent, or can never succeed)
   endSaved: boolean; // the end PATCH succeeded just now
-  plantDropped: boolean; // the start POST just answered plantAccepted: false
+  plantDropped: PlantDropped | null; // why the start POST just answered plantAccepted: false
 };
 
 // What the server is sent: the choice alone, never the saved stage.
@@ -74,17 +75,17 @@ function toChoice(p: SavedPlant | null): PlantChoice | null {
 }
 
 /** The session as a plain one, after the server turned its plant down. */
-function withoutPlant(s: SavedSession): SavedSession {
+function withoutPlant(s: SavedSession, why: PlantDropped): SavedSession {
   if (!s.plant) return s;
-  return { ...s, plant: null, plantDropped: s.plant.tendId !== undefined ? "TEND" : "SEEDS" };
+  return { ...s, plant: null, plantDropped: why };
 }
 
 // One server round for a session: start first if it has no id, then the end.
 // Never throws; network errors and 5xx leave things for a later retry.
 async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
   let id = s.id;
-  let plantDropped = false;
-  const none = { endSaved: false, plantDropped: false };
+  let plantDropped: PlantDropped | null = null;
+  const none = { endSaved: false, plantDropped: null };
   try {
     if (id === null) {
       if (skipStart) return { id, startRejected: true, endDone: !!s.ended, ...none };
@@ -103,10 +104,10 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
         return { id, startRejected: true, endDone: !!s.ended, ...none };
       }
       if (!res.ok) return { id, startRejected: false, endDone: false, ...none };
-      const body = (await res.json()) as { id?: unknown; plantAccepted?: unknown };
+      const body = (await res.json()) as { id?: unknown; plantAccepted?: unknown; dropReason?: unknown };
       if (typeof body.id !== "string") return { id, startRejected: false, endDone: false, ...none };
       id = body.id;
-      plantDropped = body.plantAccepted === false && s.plant !== null;
+      plantDropped = droppedReason(s.plant, body);
     }
     const ended = s.ended;
     if (!ended) return { id, startRejected: false, endDone: false, endSaved: false, plantDropped };
@@ -187,7 +188,7 @@ export function useFocusSession(): FocusSessionApi {
         if (r.plantDropped) noteDropped(entry.startedAt);
         if (r.endDone) continue; // sent, or can never succeed (including a rejected start)
         let next = r.id !== entry.id ? { ...entry, id: r.id } : entry;
-        if (r.plantDropped) next = withoutPlant(next);
+        if (r.plantDropped) next = withoutPlant(next, r.plantDropped);
         keep.push(next);
       }
       // entries added by clear() while we were busy stay too
@@ -224,7 +225,7 @@ export function useFocusSession(): FocusSessionApi {
         const entry = readPending().find((e) => e.startedAt === s.startedAt);
         if (entry && !r.endDone) {
           const next = r.id !== null ? { ...entry, id: r.id } : entry;
-          rest.push(r.plantDropped ? withoutPlant(next) : next);
+          rest.push(r.plantDropped ? withoutPlant(next, r.plantDropped) : next);
         }
         writePending(rest);
         return;
@@ -232,7 +233,7 @@ export function useFocusSession(): FocusSessionApi {
       patch(s.startedAt, (c) => {
         let next = c;
         if (r.id !== null && c.id !== r.id) next = { ...next, id: r.id };
-        if (r.plantDropped) next = withoutPlant(next);
+        if (r.plantDropped) next = withoutPlant(next, r.plantDropped);
         // the end may have happened while the request was in flight: only trust it
         // if what we sent was the same end
         if (r.endDone && s.ended && next.ended && !next.ended.synced && next.ended.at === s.ended.at) {

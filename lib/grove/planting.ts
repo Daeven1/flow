@@ -86,3 +86,27 @@ export function resolvePlant(
     plantCost: cost, tendPlantId: null, accepted: true,
   };
 }
+
+/**
+ * The answer to a start sent again for a session the server already stored
+ * (the first reply was lost). The server can't know what the first request
+ * asked for, so: a stored plant was accepted; no stored plant was accepted
+ * only when none is asked for now.
+ */
+export function replayedStart(
+  row: { id: string; plantSpecies: string | null },
+  choice: PlantChoice | null,
+): { id: string; plantAccepted: boolean } {
+  return { id: row.id, plantAccepted: row.plantSpecies !== null || choice === null };
+}
+
+/**
+ * What a session start stores when the plant step failed on the server. A
+ * free new plant needs no seeds and no lookups, so it is kept; a paid plant
+ * or a tend is dropped with reason ERROR.
+ */
+export function fallbackPlant(choice: PlantChoice | null): ResolvedPlant & { dropReason?: "ERROR" } {
+  if (!choice) return { ...NO_PLANT, accepted: true };
+  if (choice.tendId === undefined && costOf(choice) === 0) return resolvePlant(choice, null, null);
+  return { ...NO_PLANT, accepted: false, dropReason: "ERROR" };
+}

@@ -29,10 +29,11 @@ export function seedCount(n: number): string {
 
 export const TEND_HINT = "Tap a sapling or young tree to tend it.";
 
-/** Why a session's plant was turned down at start, for the session view. */
+/** Why a session's plant was turned down at start, for the session view and end screen. */
 export const DROPPED_LINE = {
   SEEDS: "There weren't enough seeds for that plant, so this is a plain session.",
   TEND: "That tree can't be tended right now, so this is a plain session.",
+  ERROR: "Something went wrong saving your plant, so this is a plain session.",
 } as const;
 
 export const NO_WEBGL_LINE = "This device can't draw the grove, so here's a plain timer.";

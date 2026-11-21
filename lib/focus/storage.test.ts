@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { parsePending, parseSaved, shouldRetry } from "./storage";
+import { droppedReason, parsePending, parseSaved, shouldRetry } from "./storage";
 import type { SavedSession } from "./session";
 
 const valid: SavedSession = {
@@ -78,7 +78,23 @@ test("parseSaved keeps a tend's stage and drops a stage that is out of range or 
 test("parseSaved reads plantDropped when valid and leaves it out otherwise", () => {
   expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "SEEDS" }))).toEqual({ ...valid, plantDropped: "SEEDS" });
   expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "TEND" }))).toEqual({ ...valid, plantDropped: "TEND" });
+  expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "ERROR" }))).toEqual({ ...valid, plantDropped: "ERROR" });
   expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "NOPE" }))).toEqual(valid);
   expect(parseSaved(JSON.stringify({ ...valid, plantDropped: null }))).toEqual(valid);
   expect("plantDropped" in parseSaved(JSON.stringify(valid))!).toBe(false);
+});
+
+const bush = { species: "BERRY_BUSH" as const, x: 0, y: 0 };
+const tendTree = { species: "TREE" as const, x: 1, y: 1, tendId: "t1", stage: 2 };
+test("droppedReason: nothing is dropped when the plant was accepted or there was none", () => {
+  expect(droppedReason(bush, { plantAccepted: true })).toBeNull();
+  expect(droppedReason(null, { plantAccepted: false })).toBeNull();
+  expect(droppedReason(bush, {})).toBeNull();
+});
+test("droppedReason: a turned-down plant says why", () => {
+  expect(droppedReason(bush, { plantAccepted: false })).toBe("SEEDS");
+  expect(droppedReason(tendTree, { plantAccepted: false })).toBe("TEND");
+  expect(droppedReason(bush, { plantAccepted: false, dropReason: "ERROR" })).toBe("ERROR");
+  expect(droppedReason(tendTree, { plantAccepted: false, dropReason: "ERROR" })).toBe("ERROR");
+  expect(droppedReason(bush, { plantAccepted: false, dropReason: "WHO" })).toBe("SEEDS");
 });

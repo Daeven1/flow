@@ -1,5 +1,5 @@
 import { MAX_STAGE, parsePlantChoice } from "@/lib/grove/layout";
-import { LENGTHS, type SavedPlant, type SavedSession } from "./session";
+import { LENGTHS, type PlantDropped, type SavedPlant, type SavedSession } from "./session";
 
 export const STORAGE_KEY = "grove-focus-session";
 export const PENDING_KEY = "grove-focus-pending";
@@ -87,7 +87,9 @@ function validate(v: unknown): SavedSession | null {
     ended,
     plant: parsePlant(v.plant),
   };
-  if (v.plantDropped === "SEEDS" || v.plantDropped === "TEND") out.plantDropped = v.plantDropped;
+  if (v.plantDropped === "SEEDS" || v.plantDropped === "TEND" || v.plantDropped === "ERROR") {
+    out.plantDropped = v.plantDropped;
+  }
   return out;
 }
 
@@ -105,4 +107,17 @@ function parsePlant(v: unknown): SavedPlant | null {
 /** Should a failed server call be tried again later? Most 4xx never will succeed. */
 export function shouldRetry(status: number): boolean {
   return status === 401 || status === 429 || status >= 500;
+}
+
+/**
+ * Why the server turned a session's plant down, from its start reply, or null
+ * when it kept it (or there was none). ERROR: the server's plant step failed.
+ */
+export function droppedReason(
+  plant: SavedPlant | null,
+  reply: { plantAccepted?: unknown; dropReason?: unknown },
+): PlantDropped | null {
+  if (!plant || reply.plantAccepted !== false) return null;
+  if (reply.dropReason === "ERROR") return "ERROR";
+  return plant.tendId !== undefined ? "TEND" : "SEEDS";
 }

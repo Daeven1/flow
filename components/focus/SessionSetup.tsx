@@ -102,7 +102,7 @@ export function SessionSetup({ taskIds, plants, seeds, groveStatus, onStart }: P
   const loadingSpot = defaultSpot(gridSize(1), []);
 
   // Paid plants need a known balance that covers them. While the balance is
-  // unknown they stay unavailable, but the cost line is not a "Needs" line.
+  // unknown they stay unavailable and their cost line reads "Checking your seeds…".
   const shortBy = (sp: Species) => (seeds === null ? null : Math.max(0, COST[sp] - seeds));
   const affordable = (sp: Species) => COST[sp] === 0 || shortBy(sp) === 0;
 
@@ -213,7 +213,13 @@ export function SessionSetup({ taskIds, plants, seeds, groveStatus, onStart }: P
                 >
                   <span>{speciesButtonName(sp)}</span>{" "}
                   <span className={costClass(on)}>
-                    {COST[sp] === 0 ? "Free" : short !== null && short > 0 ? `Needs ${short} more` : seedCount(COST[sp])}
+                    {COST[sp] === 0
+                      ? "Free"
+                      : short === null
+                        ? "Checking your seeds…"
+                        : short > 0
+                          ? `Needs ${short} more`
+                          : seedCount(COST[sp])}
                   </span>
                 </button>
               );

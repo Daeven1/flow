@@ -1,7 +1,8 @@
 import { test, expect, vi } from "vitest";
 import * as THREE from "three";
 import { SPECIES } from "./layout";
-import { MAX_CROWN_REACH, MAX_PLANT_HEIGHT, buildPlant, fullHeight, spotToWorld, type PlantModel } from "./models";
+import { BOUNCE_SCALE, plantBounds } from "./framing";
+import { MAX_CROWN_REACH, MAX_PLANT_HEIGHT, YOUNG_TREE_REACH, buildPlant, fullHeight, plantReach, spotToWorld, type PlantModel } from "./models";
 
 const height = (m: PlantModel) => new THREE.Box3().setFromObject(m.group).getSize(new THREE.Vector3()).y;
 test.each(SPECIES)("%s grows from a small sprout to its full height", (sp) => {
@@ -208,6 +209,34 @@ test("no tree reaches sideways past MAX_CROWN_REACH", () => {
   }
   // A bound, not a guess: no looser than it needs to be for the framing.
   expect(MAX_CROWN_REACH).toBeLessThan(0.95);
+});
+// The framing's no-clip guarantee: whatever state a plant is drawn in
+// (growing, grown, drooping, withered), it stays inside the height and reach
+// the camera allows for its species and stage.
+test.each([
+  ["WILDFLOWERS", 1], ["FERN", 1], ["BERRY_BUSH", 1], ["TREE", 1], ["TREE", 2], ["TREE", 3],
+] as const)("%s stage %i stays within its framing height and reach in every state", (sp, st) => {
+  const box = new THREE.Box3();
+  const { top } = plantBounds([{ species: sp, stage: st }]);
+  for (let seed = 1; seed <= 40; seed++) {
+    const m = buildPlant(sp, seed * 7919, "light", st);
+    for (const w of [0, 0.5, 1]) {
+      for (let g = 0; g <= 10; g++) {
+        m.setGrowth(g / 10); m.setWithered(w);
+        const at = `seed ${seed * 7919} growth ${g / 10} withered ${w}`;
+        expect(sideways(m), at).toBeLessThanOrEqual(plantReach(sp, st));
+        // Bounced, it still stays under the top the framing allows.
+        expect(box.setFromObject(m.group).max.y * (1 + BOUNCE_SCALE), at).toBeLessThanOrEqual(top);
+      }
+    }
+  }
+});
+test("young trees and saplings reach less far than a mature tree, from the same numbers", () => {
+  expect(plantReach("TREE", 1)).toBe(YOUNG_TREE_REACH);
+  expect(plantReach("TREE", 2)).toBe(YOUNG_TREE_REACH);
+  expect(plantReach("TREE", 3)).toBe(MAX_CROWN_REACH);
+  expect(YOUNG_TREE_REACH).toBeLessThan(MAX_CROWN_REACH - 0.1);
+  for (const sp of ["WILDFLOWERS", "FERN", "BERRY_BUSH"] as const) expect(plantReach(sp, 1)).toBeLessThan(MAX_CROWN_REACH);
 });
 test("a sapling has three tufts at different heights, a young tree two lumps and a side branch", () => {
   const lumpYs = (st: number) => { const m = buildPlant("TREE", 9, "light", st); m.setGrowth(1);

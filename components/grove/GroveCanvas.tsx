@@ -11,7 +11,8 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { canTend, freeSpots, gridSize, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
-import { MAX_CROWN_REACH, MAX_PLANT_HEIGHT, buildIsland, buildPlant, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
+import { buildIsland, buildPlant, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
+import { BOUNCE_SCALE, SWAY_AMPLITUDE, plantBounds } from "@/lib/grove/framing";
 import { WITHERED_GROWTH, approach, shownGrowth } from "@/lib/grove/tween";
 import type { Outcome } from "@/lib/focus/session";
 
@@ -52,19 +53,10 @@ const START_YAW = -Math.PI / 10;
 const GROWTH_HALF_LIFE = 600; // ms
 const DROOP_MS = 1500;
 const BOUNCE_MS = 400;
-const BOUNCE_SCALE = 0.08;
 // A kept plant bounces once it has (nearly) finished growing to full size.
 const BOUNCE_WHEN_WITHIN = 0.05;
-const SWAY_AMPLITUDE = 0.035; // radians, about 2 degrees
-// Sway turns a plant about x by 0.6 of this and about z by all of it at once.
-const SWAY_TILT = SWAY_AMPLITUDE * Math.hypot(1, 0.6);
-// Tallest a plant can reach: the tallest species, its +6 % seeded size
-// variation, the kept-outcome bounce and a little sway.
-const PLANT_TOP = MAX_PLANT_HEIGHT * 1.06 * (1 + BOUNCE_SCALE) + 0.03;
-// How far a plant can spread from its spot centre: the widest tree crown
-// (MAX_CROWN_REACH: seeded size, lean and lump corners included), grown by
-// the bounce, plus how far sway can tip the top of the tallest plant.
-const PLANT_REACH = MAX_CROWN_REACH * (1 + BOUNCE_SCALE) + PLANT_TOP * Math.sin(SWAY_TILT);
+// BOUNCE_SCALE and SWAY_AMPLITUDE live in lib/grove/framing, with plantBounds:
+// the height and reach the framing allows for the plants actually present.
 const YAW_HALF_LIFE = 120; // ms, for arrow-key turns
 const KEY_TURN = Math.PI / 12; // 15 degrees per arrow press
 const DRAG_TURN = 0.0105; // radians per pixel
@@ -300,14 +292,16 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
   }
 
   // --- framing -------------------------------------------------------------
-  // Frames the real island (its vertices) and the tops of the tallest
-  // possible plants at the corners of the planting grid. Two fits, and the
+  // Frames the real island (its vertices) and the tops of the tallest and
+  // widest plants present (plantBounds) at the corners of the planting grid,
+  // re-framing only when the grid or those bounds change. Two fits, and the
   // farther camera wins: the island at its resting angle fills FILL of the
   // limiting dimension, and turned to its widest (a circle of its largest
   // radius) it still fits within MAX_FILL. Framing ignores the current turn,
   // so turning never zooms.
   let width = 1;
   let height = 1;
+  let room = plantBounds([]); // what the framing allows for, from the plants present
   const target = new THREE.Vector3();
   const tmp = new THREE.Vector3();
   const rest = new THREE.Matrix4();
@@ -328,9 +322,9 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
         resting.push(v.applyMatrix4(rest));
       }
     });
-    const reach = half - 0.5 + PLANT_REACH;
+    const reach = half - 0.5 + room.reach;
     for (const [x, z] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
-      resting.push(new THREE.Vector3(x * reach, PLANT_TOP, z * reach).applyMatrix4(rest));
+      resting.push(new THREE.Vector3(x * reach, room.top, z * reach).applyMatrix4(rest));
     }
     const widest: THREE.Vector3[] = [];
     for (let i = 0; i < 48; i++) {
@@ -338,7 +332,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
       const c = Math.cos(a), s = Math.sin(a);
       widest.push(new THREE.Vector3(c * maxR, -0.1, s * maxR));
       widest.push(new THREE.Vector3(c * maxR * 0.8, minY + 0.1, s * maxR * 0.8));
-      widest.push(new THREE.Vector3(c * reach * Math.SQRT2, PLANT_TOP, s * reach * Math.SQRT2));
+      widest.push(new THREE.Vector3(c * reach * Math.SQRT2, room.top, s * reach * Math.SQRT2));
     }
     return { resting, widest };
   }
@@ -446,12 +440,20 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
 
     const count = plants.length + (g || (next.pickable && !next.tendable) ? 1 : 0);
     const wantN = gridSize(count);
+    // Re-frame only when the grid or the tallest/widest plant changes (a new
+    // plant, a tree reaching a new stage), never as a plant grows.
+    let reframe = false;
     if (wantN !== n || rebuildAll || !island) {
-      const changed = wantN !== n;
+      reframe = wantN !== n;
       n = wantN;
       rebuildIsland();
-      if (changed) frame();
     }
+    const wantRoom = plantBounds(g ? [...plants, g] : plants);
+    if (wantRoom.top !== room.top || wantRoom.reach !== room.reach) {
+      room = wantRoom;
+      reframe = true;
+    }
+    if (reframe) frame();
 
     if (rebuildAll) {
       for (const e of kept.values()) disposeKept(e);

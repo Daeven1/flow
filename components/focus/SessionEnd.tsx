@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { formatClock, progress, type SavedSession } from "@/lib/focus/session";
 import { Grove } from "@/components/grove/Grove";
 import type { GrovePlant } from "@/lib/grove/layout";
-import { plantCount } from "@/components/focus/groveText";
+import { DROPPED_LINE, plantCount } from "@/components/focus/groveText";
 import { growingFor } from "@/components/focus/SessionView";
 
 type Props = {
@@ -61,7 +61,7 @@ export function SessionEnd({ session, plants, onNew }: Props) {
 
   const plant = session.plant;
   const tend = plant?.tendId !== undefined;
-  if (tend) message += canBreak ? " Your tree grew." : " Your tree is just as it was.";
+  if (tend) message += canBreak ? " Your tree grew." : " Your tree hasn't changed.";
   // The stage comes from the saved session, never from a refreshed list, so a
   // tree that has already grown on the server is not drawn a stage too high.
   const growing = growingFor(plant, plants, progress(session, ended.at), ended.outcome);
@@ -94,6 +94,9 @@ export function SessionEnd({ session, plants, onNew }: Props) {
         <p className="text-lg font-semibold text-slate-900 dark:text-white" role="status">
           {message}
         </p>
+        {session.plantDropped && (
+          <p className="text-sm text-slate-600 dark:text-zinc-400">{DROPPED_LINE[session.plantDropped]}</p>
+        )}
 
         {canBreak && breakEnd !== null && (
           <div className="space-y-2">
