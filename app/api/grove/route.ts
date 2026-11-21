@@ -3,6 +3,7 @@ export const runtime = 'nodejs';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
+import { seedBalance } from "@/lib/grove/seedStore";
 import { isSpecies, parseTz, witherExpiry } from "@/lib/grove/layout";
 import type { GrovePlant, PlantStatus } from "@/lib/grove/layout";
 
@@ -40,8 +41,8 @@ export async function GET(req: Request) {
       status: p.status as PlantStatus,
       plantedAt: p.plantedAt.toISOString(),
       witheredAt: p.witheredAt ? p.witheredAt.toISOString() : null,
-      stage: 1, // TODO(Task 2): read the stage column
+      stage: p.stage,
     }));
 
-  return NextResponse.json({ plants });
+  return NextResponse.json({ plants, seeds: await seedBalance(prisma, userId) });
 }

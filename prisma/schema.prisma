@@ -114,6 +114,7 @@ model UserSettings {
   id            String @id
   workNightDays String @default("[1]")
   userMode      String @default("TEACHER")
+  seedsEarned   Int?   // null = not counted yet
 }
 
 model TaskPreset {
@@ -196,6 +197,8 @@ model FocusSession {
   plantSpecies   String?
   plantX         Int?
   plantY         Int?
+  plantCost      Int       @default(0)
+  tendPlantId    String?
 
   @@index([userId])
 }
@@ -210,6 +213,7 @@ model GrovePlant {
   plantedAt  DateTime  @default(now())
   witheredAt DateTime?
   sessionId  String?   @unique
+  stage      Int       @default(1)
 
   @@index([userId])
 }

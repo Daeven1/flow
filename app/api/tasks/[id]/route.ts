@@ -6,6 +6,8 @@ import { computeScheduledDate } from "@/lib/utils";
 import { getUser } from "@/lib/auth";
 import { getWorkNightDays } from "@/lib/workNightDays";
 import { validateApiKey } from "@/lib/remindersAuth";
+import { addSeeds } from "@/lib/grove/seedStore";
+import { seedDelta } from "@/lib/grove/seeds";
 
 export async function PATCH(
   req: Request,
@@ -67,11 +69,25 @@ export async function PATCH(
     data.scheduledDate = body.scheduledDate ? new Date(body.scheduledDate) : null;
   }
 
+  // Read the task's done state before the update so only a real flip earns or loses a seed
+  const before =
+    "done" in body
+      ? await prisma.task.findUnique({ where: { id, userId }, select: { done: true } })
+      : null;
+
   const task = await prisma.task.update({
     where: { id, userId },
     data,
     include: { project: true },
   });
+
+  if (before) {
+    try {
+      await addSeeds(prisma, userId, seedDelta(before.done, task.done));
+    } catch (e) {
+      console.error("addSeeds failed", e);
+    }
+  }
 
   return NextResponse.json(task);
 }

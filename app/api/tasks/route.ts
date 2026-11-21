@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { computeScheduledDate } from "@/lib/utils";
 import { getUser } from "@/lib/auth";
 import { getWorkNightDays } from "@/lib/workNightDays";
+import { addSeeds } from "@/lib/grove/seedStore";
 
 export async function GET(req: Request) {
   const userId = await getUser();
@@ -68,6 +69,14 @@ export async function POST(req: Request) {
     },
     include: { project: true },
   });
+
+  if (task.done) {
+    try {
+      await addSeeds(prisma, userId, 1);
+    } catch (e) {
+      console.error("addSeeds failed", e);
+    }
+  }
 
   return NextResponse.json(task, { status: 201 });
 }

@@ -3,6 +3,7 @@ export const runtime = 'nodejs';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/remindersAuth";
+import { addSeeds } from "@/lib/grove/seedStore";
 
 export async function PATCH(req: Request) {
   const userId = validateApiKey(req);
@@ -27,6 +28,12 @@ export async function PATCH(req: Request) {
     where: { id: task.id },
     data: { done: true, doneAt: new Date() },
   });
+
+  try {
+    await addSeeds(prisma, userId, 1);
+  } catch (e) {
+    console.error("addSeeds failed", e);
+  }
 
   return NextResponse.json({ success: true });
 }
