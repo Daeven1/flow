@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useModeContext, type Mode } from "@/components/ModeProvider";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,6 +43,7 @@ import {
 } from "@/lib/utils";
 import { useUserMode } from "@/components/UserModeProvider";
 import { format, startOfDay, startOfWeek, parseISO, addDays, differenceInCalendarDays } from "date-fns";
+import { mergeForageOrder, moveForageItem, parseForageOrder, serializeForageOrder } from "@/lib/forage/order";
 
 interface Task {
   id: string;
@@ -53,6 +54,7 @@ interface Task {
   doneAt: string | null;
   deadline: string | null;
   scheduledDate: string | null;
+  createdAt?: string;
   workCategory: string;
   context: string;
   url: string | null;
@@ -158,7 +160,10 @@ export default function DailyPage() {
   const [addingToForage, setAddingToForage] = useState(false);
   const [showForageDateMenu, setShowForageDateMenu] = useState(false);
   const [forageNotice, setForageNotice] = useState<string | null>(null);
+  // Saved Forage order (see lib/forage/order.ts). Bumped on every drag so a
+  // slower page load can't overwrite an order you just dragged.
   const [urgentCustomOrder, setUrgentCustomOrder] = useState<string[]>([]);
+  const forageOrderVersion = useRef(0);
   const [flaggedForageIds, setFlaggedForageIds] = useState<string[]>([]);
   const [editingUrgentId, setEditingUrgentId] = useState<string | null>(null);
   const [editUrgentName, setEditUrgentName] = useState("");
@@ -168,6 +173,7 @@ export default function DailyPage() {
   const [editUrgentContext, setEditUrgentContext] = useState<Mode>("PROFESSIONAL");
 
   const loadData = useCallback(async () => {
+    const orderVersionAtStart = forageOrderVersion.current;
     await fetch("/api/recurring/spawn", { method: "POST" });
     const [logRes, tasksRes] = await Promise.all([
       fetch(`/api/daily?date=${todayStr}`),
@@ -175,14 +181,26 @@ export default function DailyPage() {
     ]);
     const logData = await logRes.json();
     const tasksData = await tasksRes.json();
-    let forageOrder: string = logData?.forageOrder ?? "";
-    if (!forageOrder || forageOrder === "[]") {
-      // Nothing dragged yet today: carry over the last order you set
+    const todaysSavedOrder: string = logData?.forageOrder ?? "";
+    let savedOrder = parseForageOrder(todaysSavedOrder);
+    if (savedOrder.length === 0) {
+      // Nothing saved yet today: carry over the last order you had
       const prevRes = await fetch(`/api/daily?date=${todayStr}&lastForage=1`);
-      if (prevRes.ok) forageOrder = (await prevRes.json()).forageOrder ?? "";
+      if (prevRes.ok) savedOrder = parseForageOrder((await prevRes.json()).forageOrder);
     }
-    if (forageOrder) {
-      try { setUrgentCustomOrder(JSON.parse(forageOrder)); } catch { /* ignore corrupt data */ }
+    // Keep your order, put new arrivals on top, and save the result so a
+    // new task keeps its spot after a reload and into tomorrow.
+    if (Array.isArray(tasksData) && forageOrderVersion.current === orderVersionAtStart) {
+      const merged = mergeForageOrder(savedOrder, tasksData);
+      const nextOrder = serializeForageOrder(merged);
+      setUrgentCustomOrder([...merged.visible, ...merged.elsewhere]);
+      if (nextOrder !== todaysSavedOrder) {
+        fetch("/api/daily", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date: todayStr, forageOrder: nextOrder }),
+        });
+      }
     }
     if (logData) {
       setLog(logData);
@@ -197,37 +215,14 @@ export default function DailyPage() {
     loadData();
   }, [loadData]);
 
-  // Keep urgentCustomOrder in sync when tasks change (preserves manual order, new items on top)
-  useEffect(() => {
-    const horizon = addDays(startOfDay(new Date()), 1);
-    const urgentIds = new Set(
-      tasks
-        .filter((t) => {
-          if (t.done) return false;
-          if (!t.deadline) return false;
-          return startOfDay(parseISO(t.deadline)) <= horizon;
-        })
-        // Most overdue (earliest deadline) first, so a fresh day starts with the oldest debts on top
-        .sort((a, b) => parseISO(a.deadline!).getTime() - parseISO(b.deadline!).getTime())
-        .map((t) => t.id)
-    );
-    setUrgentCustomOrder((prev) => {
-      const kept = prev.filter((id) => urgentIds.has(id));
-      const keptSet = new Set(kept);
-      // New arrivals go on top (often things to remember right away); your dragged order stays below
-      const newIds = [...urgentIds].filter((id) => !keptSet.has(id));
-      return [...newIds, ...kept];
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks]);
-
   async function saveLog(update: Partial<DailyLog>) {
-    const next = { ...log, ...update };
-    setLog(next);
+    setLog((prev) => ({ ...prev, ...update }));
+    // Send only what changed: the Forage order and rainbow flags are saved on
+    // their own, and resending the copy loaded with the page would undo them.
     await fetch("/api/daily", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: todayStr, ...next }),
+      body: JSON.stringify({ date: todayStr, ...update }),
     });
   }
 
@@ -383,14 +378,18 @@ export default function DailyPage() {
 
   function handleUrgentDragEnd(result: DropResult) {
     if (!result.destination) return;
-    const next = [...urgentCustomOrder];
-    const [moved] = next.splice(result.source.index, 1);
-    next.splice(result.destination.index, 0, moved);
-    setUrgentCustomOrder(next);
+    forageOrderVersion.current += 1;
+    const visible = moveForageItem(
+      forageMerged.visible,
+      result.source.index,
+      result.destination.index
+    );
+    const nextOrder = serializeForageOrder({ visible, elsewhere: forageMerged.elsewhere });
+    setUrgentCustomOrder(parseForageOrder(nextOrder));
     fetch("/api/daily", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: todayStr, forageOrder: JSON.stringify(next) }),
+      body: JSON.stringify({ date: todayStr, forageOrder: nextOrder }),
     });
   }
 
@@ -457,14 +456,12 @@ export default function DailyPage() {
   });
   const urgentIds = new Set(urgentNow.map((t) => t.id));
 
-  const urgentDisplayed =
-    urgentCustomOrder.length > 0
-      ? urgentCustomOrder
-          .map((id) => urgentNow.find((t) => t.id === id))
-          .filter((t): t is Task => t !== undefined)
-      : [...urgentNow].sort(
-          (a, b) => parseISO(a.deadline!).getTime() - parseISO(b.deadline!).getTime()
-        );
+  // Same rule the page saves with, so what you see is what you drag
+  const forageMerged = mergeForageOrder(urgentCustomOrder, tasks);
+  const urgentById = new Map(urgentNow.map((t) => [t.id, t]));
+  const urgentDisplayed = forageMerged.visible
+    .map((id) => urgentById.get(id))
+    .filter((t): t is Task => t !== undefined);
 
   // Sort helper: by sprint, then by deadline soonest-first
   function sortBySprintThenDeadline(list: Task[]) {
