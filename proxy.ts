@@ -31,12 +31,14 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  // /api/jarvis/ routes authenticate with JARVIS_TOKEN themselves (no session).
+  // /api/jarvis/ routes authenticate with JARVIS_TOKEN themselves (no session);
+  // /api/pocket/ routes with a pocket board's own token (POCKET_BOARDS).
   // /grove-lab is a dev-only playground (the page itself 404s in production).
   const isPublicPath =
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/api/jarvis/") ||
+    pathname.startsWith("/api/pocket/") ||
     (process.env.NODE_ENV !== "production" && pathname === "/grove-lab");
 
   if (!user && !isPublicPath) {

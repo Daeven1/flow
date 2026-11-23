@@ -175,11 +175,17 @@ export default function DailyPage() {
     ]);
     const logData = await logRes.json();
     const tasksData = await tasksRes.json();
+    let forageOrder: string = logData?.forageOrder ?? "";
+    if (!forageOrder || forageOrder === "[]") {
+      // Nothing dragged yet today: carry over the last order you set
+      const prevRes = await fetch(`/api/daily?date=${todayStr}&lastForage=1`);
+      if (prevRes.ok) forageOrder = (await prevRes.json()).forageOrder ?? "";
+    }
+    if (forageOrder) {
+      try { setUrgentCustomOrder(JSON.parse(forageOrder)); } catch { /* ignore corrupt data */ }
+    }
     if (logData) {
       setLog(logData);
-      if (logData.forageOrder) {
-        try { setUrgentCustomOrder(JSON.parse(logData.forageOrder)); } catch { /* ignore corrupt data */ }
-      }
       if (logData.flaggedForageIds) {
         try { setFlaggedForageIds(JSON.parse(logData.flaggedForageIds)); } catch { /* ignore */ }
       }
@@ -191,7 +197,7 @@ export default function DailyPage() {
     loadData();
   }, [loadData]);
 
-  // Keep urgentCustomOrder in sync when tasks change (preserves manual order, appends new items)
+  // Keep urgentCustomOrder in sync when tasks change (preserves manual order, new items on top)
   useEffect(() => {
     const horizon = addDays(startOfDay(new Date()), 1);
     const urgentIds = new Set(
@@ -201,11 +207,14 @@ export default function DailyPage() {
           if (!t.deadline) return false;
           return startOfDay(parseISO(t.deadline)) <= horizon;
         })
+        // Most overdue (earliest deadline) first, so a fresh day starts with the oldest debts on top
+        .sort((a, b) => parseISO(a.deadline!).getTime() - parseISO(b.deadline!).getTime())
         .map((t) => t.id)
     );
     setUrgentCustomOrder((prev) => {
       const kept = prev.filter((id) => urgentIds.has(id));
       const keptSet = new Set(kept);
+      // New arrivals go on top (often things to remember right away); your dragged order stays below
       const newIds = [...urgentIds].filter((id) => !keptSet.has(id));
       return [...newIds, ...kept];
     });
@@ -453,7 +462,9 @@ export default function DailyPage() {
       ? urgentCustomOrder
           .map((id) => urgentNow.find((t) => t.id === id))
           .filter((t): t is Task => t !== undefined)
-      : urgentNow;
+      : [...urgentNow].sort(
+          (a, b) => parseISO(a.deadline!).getTime() - parseISO(b.deadline!).getTime()
+        );
 
   // Sort helper: by sprint, then by deadline soonest-first
   function sortBySprintThenDeadline(list: Task[]) {
