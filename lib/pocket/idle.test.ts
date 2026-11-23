@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { boardFor, dueAbs, dueLabel, shortTitle, topTasks, type FeedTask } from "./idle";
+import { boardFor, dueAbs, dueLabel, shortTitle } from "./idle";
 
 // Thursday 19 Nov 2026, 17:42 in Shanghai.
 const NOW = new Date("2026-11-19T09:42:00Z");
 const day = (offset: number) => new Date(Date.UTC(2026, 10, 19 + offset)); // date-only: UTC midnight
-const task = (name: string, deadline: Date | null, scheduledDate: Date | null = null): FeedTask =>
-  ({ name, deadline, scheduledDate });
 
 describe("due labels", () => {
   it("are short and ready to draw", () => {
@@ -52,29 +50,6 @@ describe("titles", () => {
     expect(cut.length).toBeLessThanOrEqual(80);
     expect(cut.endsWith("…")).toBe(true);
     expect(cut.startsWith("Write the Year 9 design unit")).toBe(true);
-  });
-});
-
-describe("the top three", () => {
-  it("are the soonest, overdue first, the deadline winning over the scheduled date", () => {
-    const tasks = [
-      task("Next week", day(8)),
-      task("Scheduled today, was due Monday", day(-3), day(0)),
-      task("Tomorrow's", null, day(1)),
-      task("Today's", day(0)),
-    ];
-    expect(topTasks(tasks, NOW)).toEqual([
-      { title: "Scheduled today, was due Monday", due: "overdue", due_abs: "Mon 16 Nov" },
-      { title: "Today's", due: "today", due_abs: "Thu 19 Nov" },
-      { title: "Tomorrow's", due: "tomorrow", due_abs: "Fri 20 Nov" },
-    ]);
-  });
-
-  it("put undated tasks last", () => {
-    expect(topTasks([task("Someday", null), task("Soon", day(1))], NOW).map((t) => t.title)).toEqual([
-      "Soon",
-      "Someday",
-    ]);
   });
 });
 

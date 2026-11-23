@@ -2,7 +2,8 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { boardFor, topTasks } from "@/lib/pocket/idle";
+import { boardFor } from "@/lib/pocket/idle";
+import { latestSavedOrder, pageTasks } from "@/lib/pocket/forage";
 
 // The idle page for a pocket e-paper board that is away from home (at home it asks JARVIS
 // on the Mac mini instead). Read-only. Not a Supabase session: the board sends its id and
@@ -33,17 +34,24 @@ export async function GET(req: Request) {
   try {
     const rows = await prisma.$queryRaw<{ id: string }[]>`SELECT id::text FROM auth.users WHERE lower(email) = ${board.email}`;
     const ids = rows.map((r) => r.id);
+    // Everything Today's Forage can hold (so overdue tasks too), plus what is coming up.
     const tasks = ids.length
       ? await prisma.task.findMany({
           where: {
             userId: { in: ids },
             done: false,
-            OR: [
-              { deadline: { gte: startOfToday, lte: until } },
-              { scheduledDate: { gte: startOfToday, lte: until } },
-            ],
+            OR: [{ deadline: { lte: until } }, { scheduledDate: { gte: startOfToday, lte: until } }],
           },
-          select: { name: true, deadline: true, scheduledDate: true },
+          select: { id: true, name: true, deadline: true, scheduledDate: true, createdAt: true },
+        })
+      : [];
+    // The order David dragged Today's Forage into: today's, or the last day that has one.
+    const logs = ids.length
+      ? await prisma.dailyLog.findMany({
+          where: { userId: { in: ids }, forageOrder: { notIn: ["", "[]"] } },
+          orderBy: { date: "desc" },
+          take: 1,
+          select: { forageOrder: true },
         })
       : [];
     const asOf = new Intl.DateTimeFormat("en-GB", {
@@ -53,7 +61,7 @@ export async function GET(req: Request) {
       hour12: false,
     }).format(now);
     return NextResponse.json(
-      { as_of: asOf, owner: board.owner, grove: "ok", tasks: topTasks(tasks, now) },
+      { as_of: asOf, owner: board.owner, grove: "ok", tasks: pageTasks(tasks, latestSavedOrder(logs), now) },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {

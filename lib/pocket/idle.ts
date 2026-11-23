@@ -2,8 +2,9 @@
 //
 // At home the board gets this page from JARVIS on the Mac mini (jarvis/pocket/idle.py in
 // the jarvis repo). Away from home it cannot reach the mini's home address, so it asks
-// Grove directly. This file is the same logic in TypeScript, and the two must agree:
-// the board draws whatever it is sent, with no dates or sorting of its own.
+// Grove directly. This file holds the labels and title rules, the same as the mini's, and
+// forage.ts holds which tasks and in what order: the board draws whatever it is sent, with
+// no dates or sorting of its own.
 
 import { timingSafeEqual } from "crypto";
 
@@ -12,12 +13,11 @@ export const TITLE_CHARS = 80; // the board wraps a title to two lines and cuts 
 export const NO_TITLE = "(untitled)"; // nothing drawable left, e.g. a title written in Chinese
 const ZONE = "Asia/Shanghai";
 
-export type FeedTask = { name: string; deadline: Date | null; scheduledDate: Date | null };
 export type PageTask = { title: string; due: string | null; due_abs: string | null };
 
 // The calendar date in Shanghai, as a day count. Grove keeps a date-only value at UTC
 // midnight, which is 08:00 the same day in Shanghai, so those keep their own date.
-function dayNumber(moment: Date): number {
+export function dayNumber(moment: Date): number {
   const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: ZONE }).format(moment);
   const [year, month, day] = ymd.split("-").map(Number);
   return Date.UTC(year, month - 1, day) / 86_400_000;
@@ -61,21 +61,6 @@ export function shortTitle(title: string): string {
   const cut = clean.slice(0, TITLE_CHARS - 1);
   const atWord = cut.includes(" ") ? cut.slice(0, cut.lastIndexOf(" ")) : cut;
   return atWord.replace(/[,;:-]+$/, "") + "…";
-}
-
-/** The most pressing tasks: dated ones soonest first (so overdue leads), then undated ones
- *  in the order given. The deadline wins over the scheduled date. */
-export function topTasks(tasks: FeedTask[], now: Date, limit: number = LIMIT): PageTask[] {
-  const withDue = tasks.map((t) => ({ name: t.name, due: t.deadline ?? t.scheduledDate }));
-  const dated = withDue
-    .filter((t): t is { name: string; due: Date } => t.due !== null)
-    .sort((a, b) => a.due.getTime() - b.due.getTime());
-  const undated = withDue.filter((t) => t.due === null);
-  return [...dated, ...undated].slice(0, limit).map((t) => ({
-    title: shortTitle(t.name),
-    due: dueLabel(t.due, now),
-    due_abs: dueAbs(t.due, now),
-  }));
 }
 
 /** The board this request is from, or null. POCKET_BOARDS is JSON:
