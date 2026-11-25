@@ -11,6 +11,8 @@ import { useUserMode } from "@/components/UserModeProvider";
 import { Check, Plus, Pencil, X, Trash2 } from "lucide-react";
 import { TemplateManager } from "@/components/TemplateManager";
 
+import { GrovePasswordForm } from "@/components/GrovePasswordForm";
+
 const DAYS = [
   { value: 0, label: "Sun" },
   { value: 1, label: "Mon" },
@@ -184,6 +186,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-10 max-w-2xl">
       <h1 className="text-xl font-bold text-slate-900 dark:text-white">Settings</h1>
+      <section className="max-w-md space-y-2"><h2 className="font-semibold">Account sign-in</h2><GrovePasswordForm setup /></section>
 
       {/* ── Profile Mode ── */}
       <section className="space-y-4">

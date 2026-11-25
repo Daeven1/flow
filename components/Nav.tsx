@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { accountEmail, signOutOfGrove } from "@/app/auth/actions";
 import {
   CalendarDays,
   FolderKanban,
@@ -39,6 +39,7 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof CalendarDays; teach
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
+  const [logoutError, setLogoutError] = useState(false);
   const [dark, setDark] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [userInitial, setUserInitial] = useState<string>("?");
@@ -58,13 +59,9 @@ export function Nav() {
   }, []);
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user?.email) setUserInitial(user.email[0].toUpperCase());
-      else if (user?.user_metadata?.name)
-        setUserInitial(user.user_metadata.name[0].toUpperCase());
-    });
-  }, []);
+    if (pathname === "/login") return;
+    accountEmail().then(email => { if (email) setUserInitial(email[0].toUpperCase()); }).catch(() => {});
+  }, [pathname]);
 
   // Close avatar menu when clicking outside
   useEffect(() => {
@@ -92,8 +89,10 @@ export function Nav() {
   const visibleNavItems = NAV_ITEMS.filter((item) => !item.teacherOnly || userMode === "TEACHER");
 
   async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    if (!await signOutOfGrove().catch(() => false)) {
+      setLogoutError(true);
+      return;
+    }
     router.push("/login");
   }
 
@@ -190,7 +189,7 @@ export function Nav() {
                 className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700 w-full text-left"
               >
                 <LogOut className="h-3.5 w-3.5" />
-                Sign out
+                {logoutError ? "Retry sign out" : "Sign out"}
               </button>
             </div>,
             document.body

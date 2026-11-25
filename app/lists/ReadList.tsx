@@ -25,7 +25,12 @@ type BookResult = {
   };
 };
 
-const BOOKS_KEY = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY;
+function coverSrc(src: string) {
+  const secure = src.replace("http://", "https://");
+  return secure.startsWith("https://books.google.com/books/content?")
+    ? `/_next/image?url=${encodeURIComponent(secure)}&w=128&q=75`
+    : secure;
+}
 
 export function ReadList() {
   const [items, setItems] = useState<ReadItem[]>([]);
@@ -47,11 +52,10 @@ export function ReadList() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!query.trim()) { setResults([]); return; }
     debounceRef.current = setTimeout(async () => {
-      if (!BOOKS_KEY) { setSearching(false); return; }
       setSearching(true);
       try {
         const res = await fetch(
-          `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=6&key=${BOOKS_KEY}`
+          `/api/lists/read/search?q=${encodeURIComponent(query)}`
         );
         const data = await res.json();
         setResults(data.items?.slice(0, 6) ?? []);
@@ -154,7 +158,7 @@ export function ReadList() {
                 {r.volumeInfo.imageLinks?.thumbnail ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={r.volumeInfo.imageLinks.thumbnail.replace("http://", "https://")}
+                    src={coverSrc(r.volumeInfo.imageLinks.thumbnail)}
                     alt=""
                     className="h-10 w-7 object-cover rounded shrink-0"
                   />
@@ -217,7 +221,7 @@ function ReadItemRow({
       </button>
       {item.thumbnail && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.thumbnail} alt="" className="h-8 w-5 object-cover rounded shrink-0" />
+        <img src={coverSrc(item.thumbnail)} alt="" className="h-8 w-5 object-cover rounded shrink-0" />
       )}
       <div className="flex-1 min-w-0">
         <span className={`text-sm ${item.checked ? "line-through" : ""} truncate block`}>

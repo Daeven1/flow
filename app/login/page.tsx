@@ -2,18 +2,19 @@
 
 import { createClient } from "@/lib/supabase/client";
 
+import { GrovePasswordForm } from "@/components/GrovePasswordForm";
+
 export default function LoginPage() {
-  const supabase = createClient();
 
   async function signInWithGoogle() {
-    await supabase.auth.signInWithOAuth({
+    await createClient().auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: `${location.origin}/auth/callback` },
     });
   }
 
   async function signInWithGitHub() {
-    await supabase.auth.signInWithOAuth({
+    await createClient().auth.signInWithOAuth({
       provider: "github",
       options: { redirectTo: `${location.origin}/auth/callback` },
     });
@@ -31,6 +32,8 @@ export default function LoginPage() {
           </p>
         </div>
 
+        <GrovePasswordForm />
+        <p className="my-4 text-xs text-slate-500">First time using a Grove password? Open Settings in a signed-in Grove session to set one.</p>
         <div className="space-y-3">
           <button
             onClick={signInWithGoogle}
