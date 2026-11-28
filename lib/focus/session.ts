@@ -16,6 +16,7 @@ export type SavedSession = {
   ticks: Tick[]; // tasks ticked off, in order
   hiddenAt: number | null; // when the page last became hidden, if still hidden
   ended: Ended | null;
+  breakEndsAt?: number; // local deadline for the optional break after a successful session
   plant: SavedPlant | null; // the plant this session grows, if one was chosen
   plantDropped?: PlantDropped; // the server turned the plant down at start, so this is a plain session
 };
@@ -26,6 +27,7 @@ export type PlantDropped = "SEEDS" | "TEND" | "ERROR";
 export type Segment = { taskId: string; minutes: number };
 
 export const GRACE_MS = 10_000;
+export const BREAK_MS = 5 * 60_000;
 export const LENGTHS: PlannedMinutes[] = [20, 25, 30];
 export const DEFAULT_LENGTH: PlannedMinutes = 25;
 

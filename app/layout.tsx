@@ -1,12 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
-import { Nav } from "@/components/Nav";
-import { ModeProvider } from "@/components/ModeProvider";
-import { UserModeProvider } from "@/components/UserModeProvider";
+import { GroveWorkspace } from "@/components/focus/FocusSessionProvider";
 import { Analytics } from "@vercel/analytics/next";
 
-const inter = Inter({ subsets: ["latin"] });
+const groveSans = localFont({ src: "./fonts/GeistVF.woff", weight: "100 900", display: "swap" });
 
 export const viewport: Viewport = {
   themeColor: [
@@ -47,14 +45,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body
-        className={`${inter.className} bg-[#E0EFFE] dark:bg-[#0D1B2E] text-slate-900 dark:text-zinc-100 min-h-screen`}
+        className={`${groveSans.className} bg-[#E0EFFE] dark:bg-[#0D1B2E] text-slate-900 dark:text-zinc-100 min-h-screen`}
       >
-        <UserModeProvider>
-          <ModeProvider>
-            <Nav />
-            <main className="max-w-5xl mx-auto px-4 py-8">{children}</main>
-          </ModeProvider>
-        </UserModeProvider>
+        <GroveWorkspace>{children}</GroveWorkspace>
         <Analytics />
       </body>
     </html>

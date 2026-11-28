@@ -21,22 +21,14 @@ export async function PATCH(
   const body = await req.json();
   const data: Record<string, unknown> = {};
 
-  // Read the task's done state before the update so only a real flip earns or
-  // loses a seed, and only a real flip moves doneAt
-  const before =
-    "done" in body
-      ? await prisma.task.findUnique({ where: { id, userId }, select: { done: true, doneAt: true } })
-      : null;
+  if ("done" in body && typeof body.done !== "boolean") {
+    return NextResponse.json({ error: "done must be a boolean" }, { status: 400 });
+  }
 
   if ("pinned" in body) data.pinned = Boolean(body.pinned);
   if ("schedulePinned" in body) data.schedulePinned = Boolean(body.schedulePinned);
   if ("showInRegular" in body) data.showInRegular = Boolean(body.showInRegular);
   if ("sortOrder" in body) data.sortOrder = Number(body.sortOrder);
-  if ("done" in body) {
-    data.done = body.done;
-    // Sending done:true to a task that is already done leaves its doneAt as is
-    if (!before || Boolean(body.done) !== before.done) data.doneAt = body.done ? new Date() : null;
-  }
   if ("name" in body) data.name = body.name;
   if ("sprint" in body) data.sprint = Number(body.sprint);
   if ("estMinutes" in body) data.estMinutes = Number(body.estMinutes);
@@ -77,21 +69,37 @@ export async function PATCH(
     data.scheduledDate = body.scheduledDate ? new Date(body.scheduledDate) : null;
   }
 
-  const task = await prisma.task.update({
-    where: { id, userId },
-    data,
-    include: { project: true },
-  });
-
-  if (before) {
-    try {
-      await addSeeds(prisma, userId, tickDelta(before, task.done));
-    } catch (e) {
-      console.error("addSeeds failed", e);
-    }
+  const where = { id, userId };
+  const include = { project: true };
+  if (!("done" in body)) {
+    return NextResponse.json(await prisma.task.update({ where, data, include }));
   }
 
-  return NextResponse.json(task);
+  const result = await prisma.$transaction(async (tx) => {
+    // The native check-off uses the same row lock. Read the prior state after
+    // acquiring it so two devices cannot both earn a seed for one change.
+    const [before] = await tx.$queryRaw<{ done: boolean; doneAt: Date | null }[]>`
+      SELECT "done", "doneAt" FROM "Task"
+      WHERE "id" = ${id} AND "userId" = ${userId} FOR UPDATE
+    `;
+    if (!before) return null;
+    const changed = before.done !== body.done;
+    if (changed) {
+      data.done = body.done;
+      data.doneAt = body.done ? new Date() : null;
+    }
+    // A replay must preserve both doneAt and the task row version. Combined
+    // requests can still edit other fields on an already-completed task.
+    const task = Object.keys(data).length
+      ? await tx.task.update({ where, data, include })
+      : await tx.task.findUniqueOrThrow({ where, include });
+    if (changed) await addSeeds(tx, userId, tickDelta(before, body.done));
+    return { task, changed };
+  });
+  if (!result) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+  return NextResponse.json(result.task, {
+    headers: { "Grove-Completion-Changed": result.changed ? "1" : "0" },
+  });
 }
 
 export async function DELETE(

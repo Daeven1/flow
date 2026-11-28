@@ -51,6 +51,20 @@ test("parseSaved round-trips an ended session", () => {
   expect(parseSaved(JSON.stringify(ended))).toEqual(ended);
 });
 
+test("a successful session restores its original break deadline", () => {
+  const ended = { outcome: "CLEARED", at: 1_070_000, synced: true };
+  const onBreak = { ...valid, ended, breakEndsAt: 1_500_000 };
+  expect(parseSaved(JSON.stringify(onBreak))).toEqual(onBreak);
+  for (const breakEndsAt of [ended.at, "1_500_000", null]) {
+    expect(parseSaved(JSON.stringify({ ...onBreak, breakEndsAt }))).toEqual({ ...valid, ended });
+  }
+  for (const outcome of ["GAVE_UP", "LEFT"]) {
+    const failed = { ...valid, ended: { ...ended, outcome } };
+    expect(parseSaved(JSON.stringify({ ...failed, breakEndsAt: 1_500_000 }))).toEqual(failed);
+  }
+  expect(parseSaved(JSON.stringify({ ...valid, breakEndsAt: 1_500_000 }))).toEqual(valid);
+});
+
 test("parsePending handles null and malformed input", () => {
   expect(parsePending(null)).toEqual([]);
   expect(parsePending("{")).toEqual([]);

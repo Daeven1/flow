@@ -1,18 +1,24 @@
 export const runtime = 'nodejs';
 
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
+import { OWNER_HEADER } from "@/lib/focus/accountStorage";
 import { parseEnd } from "@/lib/focus/validate";
 import { MAX_STAGE, witherExpiry } from "@/lib/grove/layout";
 import { planFor } from "@/lib/grove/planting";
+import { timeEntryId } from "@/lib/timeEntry";
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const userId = await getUser();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const expectedOwner = req.headers.get(OWNER_HEADER);
+  if (!userId || (expectedOwner !== null && expectedOwner !== userId)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { id } = await params;
   const session = await prisma.focusSession.findFirst({ where: { id, userId } });
@@ -71,6 +77,7 @@ export async function PATCH(
       if (!task) continue;
       await tx.timeLog.create({
         data: {
+          id: timeEntryId("focus", randomUUID()),
           taskId: task.id,
           taskName: task.name,
           sprint: task.sprint,
@@ -79,10 +86,15 @@ export async function PATCH(
           date: input.endedAt,
         },
       });
-      await tx.task.update({
-        where: { id: task.id },
-        data: { actualMinutes: (task.actualMinutes ?? 0) + seg.minutes },
+      // A delayed session can land while a task total is being corrected.
+      // Apply the earned minutes to the latest total inside the database.
+      const first = await tx.task.updateMany({
+        where: { id: task.id, actualMinutes: null },
+        data: { actualMinutes: seg.minutes },
       });
+      if (!first.count) {
+        await tx.task.update({ where: { id: task.id }, data: { actualMinutes: { increment: seg.minutes } } });
+      }
     }
   });
 

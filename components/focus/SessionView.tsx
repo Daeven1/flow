@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { StickyPile } from "@/components/StickyPile";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { Check, Clock3, ExternalLink } from "lucide-react";
+import { useFocusTitle } from "@/lib/focus/useFocusTitle";
 import { Grove, type Growing } from "@/components/grove/Grove";
 import { MAX_STAGE, type GrovePlant } from "@/lib/grove/layout";
 import type { GroveStatus } from "@/lib/grove/useGrove";
-import { DROPPED_LINE, NO_WEBGL_LINE, OnFallback, growingLine, plantCount } from "@/components/focus/groveText";
+import { DROPPED_LINE, NO_WEBGL_LINE, growingLine, plantCount } from "@/components/focus/groveText";
 import {
+  endsAt,
   formatClock,
   progress,
   remainingMs,
@@ -19,6 +21,8 @@ export type PileTask = {
   name: string;
   sprint?: number;
   estMinutes?: number;
+  url?: string | null;
+  completionState?: "checking" | "unavailable" | "removed";
 };
 
 /**
@@ -39,9 +43,7 @@ export function growingFor(
   return { species: "TREE", spot, stage, progress: p, outcome, tendId: plant.tendId };
 }
 
-// The one slot piece 2 replaces with the grove. Keep its props as they are.
 export function FocusVisual({ progress, outcome }: { progress: number; outcome: Outcome | null }) {
-  void outcome;
   const pct = Math.round(progress * 100);
   return (
     <div
@@ -50,10 +52,10 @@ export function FocusVisual({ progress, outcome }: { progress: number; outcome: 
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={pct}
-      className="w-full max-w-md h-3 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden"
+      className="h-1.5 w-full overflow-hidden rounded-full bg-emerald-950/15 dark:bg-white/15"
     >
       <div
-        className="h-full rounded-full bg-emerald-600 dark:bg-emerald-400 transition-[width] duration-1000 ease-linear motion-reduce:transition-none"
+        className={`h-full rounded-full transition-[width] duration-1000 ease-linear motion-reduce:transition-none ${outcome === "LEFT" || outcome === "GAVE_UP" ? "bg-slate-500" : "bg-emerald-700 dark:bg-emerald-300"}`}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -64,138 +66,152 @@ type Props = {
   session: SavedSession;
   now: number;
   wakeLockOk: boolean | null;
-  tasks: PileTask[]; // every task in the session, in queue order
-  plants: GrovePlant[]; // the grove as it stands, without this session's plant
+  tasks: PileTask[];
+  plants: GrovePlant[];
   groveStatus: GroveStatus;
-  onComplete: (taskId: string) => void; // ticks one task off
+  onComplete: (taskId: string) => void;
   onGiveUp: () => void;
 };
 
 const focusRing =
-  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:focus-visible:outline-blue-400";
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 dark:focus-visible:outline-emerald-300";
+const primary =
+  `inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 dark:bg-emerald-200 dark:text-emerald-950 dark:hover:bg-emerald-100 ${focusRing}`;
+
+function ignoreHeldKey(event: KeyboardEvent<HTMLDivElement>) {
+  if (event.repeat && (event.key === "Enter" || event.key === " ")) event.preventDefault();
+}
 
 export function SessionView({ session, now, wakeLockOk, tasks, plants, groveStatus, onComplete, onGiveUp }: Props) {
   const [confirming, setConfirming] = useState(false);
-  const [noWebGL, setNoWebGL] = useState(false);
-  const onNoWebGL = useCallback(() => setNoWebGL(true), []);
-
+  const endButton = useRef<HTMLButtonElement>(null);
+  const keepButton = useRef<HTMLButtonElement>(null);
+  const returnToEnd = useRef(false);
+  const heading = useRef<HTMLHeadingElement>(null);
   const left = remainingMs(session, now);
+  const clock = formatClock(left);
   const minutesLeft = Math.ceil(left / 60_000);
   const p = progress(session, now);
+  const growing = growingFor(session.plant, plants, p, null);
+  const strict = session.rule === "STRICT";
+  const finish = new Date(endsAt(session)).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-  // Ticked tasks first (in the order they were ticked), then the rest in queue order.
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  const tickedIds = session.ticks.map((t) => t.taskId);
-  const ordered = [
-    ...tickedIds.map((id) => byId.get(id)).filter((t): t is PileTask => t !== undefined),
-    ...tasks.filter((t) => !tickedIds.includes(t.id)),
-  ];
+  const ticked = new Set(session.ticks.map((tick) => tick.taskId));
+  const [current, next] = tasks.filter((task) => !ticked.has(task.id));
+  let reference: URL | null = null;
+  if (current?.url) {
+    try {
+      const parsed = new URL(current.url);
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") reference = parsed;
+    } catch { /* A task with an incomplete link can still be completed. */ }
+  }
+  useFocusTitle(`${clock} · Focus · Grove`);
 
-  const plant = session.plant;
-  const growing = growingFor(plant, plants, p, null); // a tend reads "Your tree is growing."
-  // Side by side at lg only when the grove is drawn; the plain bar keeps piece 1's stack.
-  const withGrove = growing !== null && !noWebGL;
-  const wakeWarning = session.rule === "STRICT" && wakeLockOk === false;
+  useEffect(() => { heading.current?.focus(); }, [session.startedAt]);
 
-  const bar = (
-    <div className="w-full flex flex-col items-center gap-2 py-2">
-      <FocusVisual progress={p} outcome={null} />
-      {growing && <p className="text-sm text-slate-600 dark:text-zinc-400 text-center">{NO_WEBGL_LINE}</p>}
-      {!growing && session.plantDropped && (
-        <p className="text-sm text-slate-600 dark:text-zinc-400 text-center">{DROPPED_LINE[session.plantDropped]}</p>
-      )}
-    </div>
-  );
+  useEffect(() => {
+    if (confirming) {
+      keepButton.current?.focus();
+      returnToEnd.current = true;
+    } else if (returnToEnd.current) {
+      endButton.current?.focus();
+      returnToEnd.current = false;
+    }
+  }, [confirming]);
 
   return (
-    <div
-      className={`grid grid-cols-1 gap-4 ${
-        withGrove ? "lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8 lg:items-center" : "justify-items-center"
-      }`}
-    >
-      <div className="w-full flex flex-col items-center gap-1">
-        {growing ? (
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-6" onKeyDownCapture={ignoreHeldKey}>
+      <section aria-labelledby="focus-clock-heading" className="min-w-0 rounded-2xl border border-emerald-900/15 bg-gradient-to-b from-[#f8fbef] to-[#deeddf] p-4 text-emerald-950 sm:p-6 dark:border-emerald-200/15 dark:from-[#1d3931] dark:to-[#142c28] dark:text-emerald-50">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 ref={heading} tabIndex={-1} id="focus-clock-heading" className="text-sm font-semibold outline-none">Time remaining</h2>
+            <p role="timer" aria-label="Focus time remaining" aria-live="off" className="mt-1 text-[3.5rem] font-semibold leading-none tracking-[-0.055em] tabular-nums sm:text-7xl">{clock}</p>
+          </div>
+          <p className="mt-1 text-right text-xs leading-relaxed text-emerald-900 dark:text-emerald-100">
+            <span className="block font-semibold">{strict ? "Strict" : "Gentle"} focus</span>
+            <span>{session.plannedMinutes} minutes</span>
+          </p>
+        </div>
+        {growing && (
           <Grove
             plants={plants}
             growing={growing}
-            label={`${growingLine(growing.species)}${
-              groveStatus === "failed" ? "" : ` ${plantCount(plants.length)} in your grove`
-            }`}
-            className={`w-full ${wakeWarning ? "h-[30svh]" : "h-[38svh]"} min-h-[180px] lg:h-[min(calc(100svh_-_240px),560px)] lg:min-h-[320px]`}
-            fallback={
-              <>
-                <OnFallback onShow={onNoWebGL} />
-                {bar}
-              </>
-            }
+            label={`${growingLine(growing.species)}${groveStatus === "loaded" ? ` ${plantCount(plants.length)} in your grove` : ""}`}
+            className="w-full h-[clamp(135px,22svh,215px)] lg:h-[clamp(235px,36svh,390px)]"
+            fallback={<p className="my-4 text-sm">{NO_WEBGL_LINE}</p>}
           />
-        ) : (
-          bar
         )}
-        {growing && !noWebGL && groveStatus === "failed" && (
-          <p className="text-sm text-slate-600 dark:text-zinc-400 text-center">
-            Your grove couldn&apos;t load just now. Your plants are safe.
-          </p>
-        )}
-        <div
-          aria-live="off"
-          className="text-sm tabular-nums text-slate-600 dark:text-zinc-400"
-        >
-          {formatClock(left)} left
+        <div className={growing ? "mt-2" : "mt-5"}>
+          <FocusVisual progress={p} outcome={null} />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs leading-relaxed text-emerald-900 dark:text-emerald-100">
+            <span className="inline-flex items-center gap-1.5"><Clock3 size={14} aria-hidden="true" /> Ends at {finish}</span>
+            {growing && <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full border-2 border-amber-600 dark:border-amber-300" />{growingLine(growing.species)}</span>}
+          </div>
         </div>
-        <div className="sr-only" aria-live="polite" role="status">
-          {minutesLeft} {minutesLeft === 1 ? "minute" : "minutes"} left
-        </div>
-      </div>
+        {session.plantDropped && <p className="mt-3 text-sm">{DROPPED_LINE[session.plantDropped]}</p>}
+        {growing && groveStatus === "failed" && <p className="mt-3 text-sm">Your grove couldn’t load. Your plants are safe.</p>}
+        {strict && <p className="mt-3 border-t border-emerald-900/15 pt-3 text-xs leading-relaxed dark:border-emerald-200/20">Keep Grove visible. More than 10 seconds away ends this session.{wakeLockOk === false && " This device can’t keep the screen awake, so keep it unlocked."}</p>}
+        <div className="sr-only" role="status" aria-atomic="true">{minutesLeft} {minutesLeft === 1 ? "minute" : "minutes"} left</div>
+      </section>
 
-      <div className="w-full max-w-[480px] mx-auto flex flex-col items-center gap-3">
-        {wakeWarning && (
-          <p className="w-full text-sm text-amber-900 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
-            This phone can&apos;t be kept awake from here, so keep the screen from locking yourself.
-          </p>
+      <section aria-label="Session tasks" className="min-w-0 space-y-3">
+        {current && (
+          <div className="rounded-xl border border-amber-900/20 bg-[#fff7d9] p-4 text-[#352f1f] shadow-sm sm:p-5 dark:border-amber-300/20 dark:bg-[#3a3527] dark:text-amber-50">
+            <div className="mb-2 flex items-baseline justify-between gap-3 text-xs text-[#655330] dark:text-[#e4cd99]">
+              <span className="font-semibold">Current task</span>
+              <span className="tabular-nums">{ticked.size + 1} of {tasks.length}</span>
+            </div>
+            <h3 aria-live="polite" aria-atomic="true" className="text-xl font-semibold leading-snug tracking-tight [overflow-wrap:anywhere] sm:text-2xl">{current.name}</h3>
+            {current.estMinutes !== undefined && <p className="mt-2 text-xs text-[#655330] dark:text-[#e4cd99]">{current.estMinutes} min estimated{current.sprint !== undefined ? ` · Sprint ${current.sprint}` : ""}</p>}
+            {reference && (
+              <div className="mt-2">
+                <a href={reference.href} target="_blank" rel="noopener noreferrer"
+                  aria-describedby={strict ? "focus-reference-rule" : undefined}
+                  className={`inline-flex min-h-11 max-w-full items-center gap-2 rounded-md text-sm font-medium text-emerald-900 underline decoration-emerald-800/40 underline-offset-4 hover:decoration-current dark:text-emerald-200 ${focusRing}`}>
+                  <ExternalLink size={15} aria-hidden="true" className="shrink-0" />
+                  <span className="shrink-0">Open task link</span>
+                  <span aria-hidden="true" className="truncate text-xs font-normal text-[#655330] dark:text-[#e4cd99]">{reference.hostname}</span>
+                  <span className="sr-only"> on {reference.hostname} in a new tab</span>
+                </a>
+                {strict && <p id="focus-reference-rule" className="text-xs leading-relaxed text-[#655330] dark:text-[#e4cd99]">Return to Grove within 10 seconds to keep Strict focus running.</p>}
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={confirming || current.completionState === "checking" || current.completionState === "unavailable"}
+              onClick={(event) => { if (event.detail <= 1) onComplete(current.id); }}
+              className={`mt-4 w-full disabled:opacity-50 ${primary}`}
+            >
+              {current.completionState ? {
+                checking: "Checking task…",
+                unavailable: "Task unavailable",
+                removed: "Continue past removed task",
+              }[current.completionState] : <><Check size={17} aria-hidden="true" /> Complete task</>}
+            </button>
+            {next && <p className="mt-3 border-t border-amber-900/15 pt-3 text-sm leading-snug text-[#655330] [overflow-wrap:anywhere] dark:border-amber-100/15 dark:text-[#e4cd99]"><span className="font-semibold">Up next</span> · {next.name}</p>}
+          </div>
         )}
-
-        <StickyPile
-          tasks={ordered}
-          initialIndex={tickedIds.length}
-          onComplete={onComplete}
-          onCleared={() => {}}
-          compact
-        />
-
         {confirming ? (
-          <div role="group" aria-label="Give up this session" className="flex flex-col items-center gap-2">
-            <p className="text-sm text-slate-700 dark:text-zinc-300">
-              Really give up? This session will be lost.
+          <div
+            role="group" aria-labelledby="focus-end-heading" aria-describedby="focus-end-effect"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") { event.preventDefault(); setConfirming(false); }
+            }}
+            className="rounded-xl border border-slate-300 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <h3 id="focus-end-heading" className="text-base font-semibold">End this session early?</h3>
+            <p id="focus-end-effect" className="mt-1 text-sm leading-relaxed text-slate-600 dark:text-zinc-300">
+              This session’s time won’t be logged.{session.plant && (session.plant.tendId ? " Your tree will stay at its current stage." : " This plant will wither.")}
             </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onGiveUp}
-                className={`min-h-[44px] px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-zinc-600 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors ${focusRing}`}
-              >
-                Yes, give up
-              </button>
-              <button
-                type="button"
-                autoFocus
-                onClick={() => setConfirming(false)}
-                className={`min-h-[44px] px-4 py-2 text-sm font-semibold rounded-lg bg-slate-900 dark:bg-white text-white dark:text-zinc-900 hover:bg-slate-700 dark:hover:bg-zinc-100 transition-colors ${focusRing}`}
-              >
-                Keep going
-              </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button ref={keepButton} type="button" onClick={() => setConfirming(false)} className={primary}>Keep focusing</button>
+              <button type="button" onClick={onGiveUp} className={`min-h-11 rounded-lg px-4 text-sm font-semibold text-rose-800 hover:bg-rose-50 dark:text-rose-200 dark:hover:bg-rose-950 ${focusRing}`}>End early</button>
             </div>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            className={`min-h-[44px] px-3 text-sm font-medium rounded-lg text-slate-600 dark:text-zinc-400 underline-offset-4 hover:underline hover:text-slate-900 dark:hover:text-white ${focusRing}`}
-          >
-            Give up
-          </button>
+          <button ref={endButton} type="button" onClick={() => setConfirming(true)} className={`min-h-11 rounded-lg px-3 text-sm font-medium text-slate-600 underline-offset-4 hover:underline dark:text-zinc-300 ${focusRing}`}>End session</button>
         )}
-      </div>
+      </section>
     </div>
   );
 }

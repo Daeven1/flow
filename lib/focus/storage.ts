@@ -90,6 +90,12 @@ function validate(v: unknown): SavedSession | null {
   if (v.plantDropped === "SEEDS" || v.plantDropped === "TEND" || v.plantDropped === "ERROR") {
     out.plantDropped = v.plantDropped;
   }
+  if (
+    (ended?.outcome === "CLEARED" || ended?.outcome === "COMPLETED") &&
+    isNum(v.breakEndsAt) && v.breakEndsAt > ended.at
+  ) {
+    out.breakEndsAt = v.breakEndsAt;
+  }
   return out;
 }
 

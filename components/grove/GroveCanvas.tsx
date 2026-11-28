@@ -175,12 +175,12 @@ function buildMarker() {
   group.visible = false;
   return {
     group,
-    /** "seed": the seedling in its ring, on a free spot. "tree": only a wider ring, around a chosen tree. */
-    setMode(mode: "seed" | "tree") {
+    /** Add a seedling on an empty spot, or ring the plant that's already there. */
+    setMode(mode: "seed" | "plant") {
       seedling.visible = mode === "seed";
-      ring.scale.setScalar(mode === "tree" ? TREE_RING_SCALE : 1);
+      ring.scale.setScalar(mode === "plant" ? TREE_RING_SCALE : 1);
       // Lifted like the tend rings, so it reads under a crown.
-      ring.position.y = mode === "tree" ? TEND_RING.lift + 0.002 : 0.008;
+      ring.position.y = mode === "plant" ? TEND_RING.lift + 0.002 : 0.008;
     },
     setTheme(theme: Theme) {
       stemMat.color.setHex(SPROUT[theme].stem);
@@ -614,10 +614,12 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
       r.visible = e !== selTree;
     }
 
-    if (selTree) {
-      marker.setMode("tree");
+    const activeSpot = input.growing?.outcome === null ? input.growing.spot : null;
+    const markedPlant = selTree ?? activeSpot;
+    if (markedPlant) {
+      marker.setMode("plant");
       marker.group.visible = true;
-      marker.group.position.copy(spotToWorld(selTree));
+      marker.group.position.copy(spotToWorld(markedPlant));
     } else {
       marker.setMode("seed");
       marker.group.visible = sel !== null && free.has(sel);

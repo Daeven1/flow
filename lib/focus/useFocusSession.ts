@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PlantChoice } from "@/lib/grove/layout";
 import {
+  BREAK_MS,
   judge,
   segments,
   type FocusRule,
@@ -11,9 +12,11 @@ import {
   type SavedPlant,
   type SavedSession,
 } from "./session";
-import { PENDING_KEY, STORAGE_KEY, droppedReason, parsePending, parseSaved, shouldRetry } from "./storage";
+import { droppedReason, shouldRetry } from "./storage";
+import { AccountFocusStorage, OWNER_HEADER } from "./accountStorage";
 
 export type FocusSessionApi = {
+  owner: string;
   ready: boolean; // false until localStorage has been read
   session: SavedSession | null;
   now: number; // ticks about once a second while running
@@ -21,42 +24,13 @@ export type FocusSessionApi = {
   endsSynced: number; // goes up each time an end reaches the server (this session's or a pending one)
   plantsDropped: number[]; // startedAt of each session whose plant the server turned down (this page load)
   start(input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[]; plant: SavedPlant | null }): void;
-  tick(taskId: string): void; // records the tick; ends as CLEARED if it was the last
+  tick(taskId: string): boolean; // true when accepted, including the last task
   giveUp(): void; // ends as GAVE_UP
+  startBreak(): void; // once per successful session, survives a reload
   clear(): void; // forget an ended session
 };
 
 type WakeLockSentinelLike = { release(): Promise<void> };
-
-function save(s: SavedSession | null) {
-  try {
-    if (s) localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-    else localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // private mode or storage full: the session still runs in memory
-  }
-}
-
-function readPending(): SavedSession[] {
-  try {
-    return parsePending(localStorage.getItem(PENDING_KEY));
-  } catch {
-    return [];
-  }
-}
-
-function addPending(s: SavedSession) {
-  writePending([...readPending().filter((e) => e.startedAt !== s.startedAt), s]);
-}
-
-function writePending(list: SavedSession[]) {
-  try {
-    if (list.length) localStorage.setItem(PENDING_KEY, JSON.stringify(list));
-    else localStorage.removeItem(PENDING_KEY);
-  } catch {
-    // storage unavailable: nothing more we can do
-  }
-}
 
 type PushResult = {
   id: string | null; // the server id, if we have one now
@@ -82,7 +56,8 @@ function withoutPlant(s: SavedSession, why: PlantDropped): SavedSession {
 
 // One server round for a session: start first if it has no id, then the end.
 // Never throws; network errors and 5xx leave things for a later retry.
-async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
+async function push(s: SavedSession, skipStart: boolean, owner: string, signal: AbortSignal): Promise<PushResult> {
+  const headers = { "Content-Type": "application/json", [OWNER_HEADER]: owner };
   let id = s.id;
   let plantDropped: PlantDropped | null = null;
   const none = { endSaved: false, plantDropped: null };
@@ -91,7 +66,7 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
       if (skipStart) return { id, startRejected: true, endDone: !!s.ended, ...none };
       const res = await fetch("/api/focus/sessions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers, signal, redirect: "error",
         body: JSON.stringify({
           startedAt: new Date(s.startedAt).toISOString(),
           plannedMinutes: s.plannedMinutes,
@@ -113,7 +88,7 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
     if (!ended) return { id, startRejected: false, endDone: false, endSaved: false, plantDropped };
     const res = await fetch(`/api/focus/sessions/${encodeURIComponent(id)}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers, signal, redirect: "error",
       body: JSON.stringify({
         outcome: ended.outcome,
         endedAt: new Date(ended.at).toISOString(),
@@ -123,6 +98,9 @@ async function push(s: SavedSession, skipStart: boolean): Promise<PushResult> {
     });
     // 400/404 can never succeed, so stop retrying; 5xx may recover later.
     const done = res.ok || res.status === 400 || res.status === 404;
+    if (res.ok && !signal.aborted && (ended.outcome === "COMPLETED" || ended.outcome === "CLEARED")) {
+      window.dispatchEvent(new Event("grove:focus-time-saved"));
+    }
     return { id, startRejected: false, endDone: done, endSaved: res.ok, plantDropped };
   } catch {
     return { id, startRejected: false, endDone: false, endSaved: false, plantDropped };
@@ -137,7 +115,9 @@ function applyJudge(s: SavedSession, now: number): SavedSession {
   return { ...s, ended: { outcome: verdict.outcome, at: verdict.at, synced: false } };
 }
 
-export function useFocusSession(): FocusSessionApi {
+export function useFocusSession(owner: string): FocusSessionApi {
+  const storage = useMemo(() => new AccountFocusStorage(owner), [owner]);
+  const lifetime = useRef<AbortController | null>(null);
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<SavedSession | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -159,8 +139,8 @@ export function useFocusSession(): FocusSessionApi {
   const commit = useCallback((next: SavedSession | null) => {
     ref.current = next;
     setSession(next);
-    save(next);
-  }, []);
+    storage.save(next);
+  }, [storage]);
 
   // Applies a change to the current session, if it is still the one we started with.
   const patch = useCallback(
@@ -175,15 +155,17 @@ export function useFocusSession(): FocusSessionApi {
 
   // Ended sessions that were cleared before they reached the server.
   const flushPending = useCallback(async () => {
-    if (flushing.current) return;
-    const list = readPending();
+    const signal = lifetime.current?.signal;
+    if (!signal || signal.aborted || flushing.current) return;
+    const list = storage.readPending();
     if (list.length === 0) return;
     flushing.current = true;
     try {
       const keep: SavedSession[] = [];
       let saved = 0;
       for (const entry of list) {
-        const r = await push(entry, false);
+        const r = await push(entry, false, owner, signal);
+        if (signal.aborted) return;
         if (r.endSaved) saved++;
         if (r.plantDropped) noteDropped(entry.startedAt);
         if (r.endDone) continue; // sent, or can never succeed (including a rejected start)
@@ -193,27 +175,30 @@ export function useFocusSession(): FocusSessionApi {
       }
       // entries added by clear() while we were busy stay too
       const done = new Set(list.map((e) => e.startedAt));
-      const added = readPending().filter((e) => !done.has(e.startedAt));
-      writePending([...keep, ...added]);
+      const added = storage.readPending().filter((e) => !done.has(e.startedAt));
+      storage.writePending([...keep, ...added]);
       if (saved > 0) setEndsSynced((c) => c + saved);
     } finally {
       flushing.current = false;
     }
-  }, [noteDropped]);
+  }, [noteDropped, owner, storage]);
 
   // Server sync for the current session. Never awaited by the UI.
   const sync = useCallback(async () => {
+    const signal = lifetime.current?.signal;
+    if (!signal || signal.aborted) return;
     if (syncing.current) {
       syncDirty.current = true; // something changed mid-flight: go round once more
       return;
     }
     const s = ref.current;
     if (!s) return;
-    if (s.ended?.synced) return;
+    if (s.ended?.synced || (s.id !== null && !s.ended)) return;
     syncing.current = true;
     try {
       const skipStart = rejectedStart.current === s.startedAt;
-      const r = await push(s, skipStart);
+      const r = await push(s, skipStart, owner, signal);
+      if (signal.aborted) return;
       if (r.startRejected) rejectedStart.current = s.startedAt;
       if (r.endSaved) setEndsSynced((c) => c + 1);
       if (r.plantDropped) noteDropped(s.startedAt);
@@ -221,13 +206,13 @@ export function useFocusSession(): FocusSessionApi {
       if (ref.current?.startedAt !== s.startedAt) {
         // the session was moved to the pending list while we were talking to the
         // server: keep what we learned (the id), or drop the entry if it is done
-        const rest = readPending().filter((e) => e.startedAt !== s.startedAt);
-        const entry = readPending().find((e) => e.startedAt === s.startedAt);
+        const rest = storage.readPending().filter((e) => e.startedAt !== s.startedAt);
+        const entry = storage.readPending().find((e) => e.startedAt === s.startedAt);
         if (entry && !r.endDone) {
           const next = r.id !== null ? { ...entry, id: r.id } : entry;
           rest.push(r.plantDropped ? withoutPlant(next, r.plantDropped) : next);
         }
-        writePending(rest);
+        storage.writePending(rest);
         return;
       }
       patch(s.startedAt, (c) => {
@@ -246,49 +231,80 @@ export function useFocusSession(): FocusSessionApi {
       if (syncDirty.current) {
         syncDirty.current = false;
         void sync();
-      } else if (flushWanted.current) {
+      }
+      if (!syncing.current && flushWanted.current) {
         flushWanted.current = false;
         void flushPending();
       }
     }
-  }, [patch, flushPending, noteDropped]);
+  }, [patch, flushPending, noteDropped, owner, storage]);
+
+  const requestFlush = useCallback(() => {
+    // An outstanding start may have just moved to pending. Wait for its ID.
+    if (syncing.current) flushWanted.current = true;
+    else void flushPending();
+  }, [flushPending]);
 
   const syncAll = useCallback(() => {
     void sync();
-    // never flush while the current session is mid-sync: the same start could be POSTed twice
-    if (syncing.current) flushWanted.current = true;
-    else void flushPending();
-  }, [sync, flushPending]);
+    requestFlush();
+  }, [sync, requestFlush]);
 
   const running = !!session && !session.ended;
   const strictRunning = running && session?.rule === "STRICT";
   const startedAt = session?.startedAt;
-  const sessionId = session?.id;
   const endedFlag = !!session?.ended;
-  const synced = session?.ended?.synced;
+  const onBreak = session?.breakEndsAt !== undefined && now < session.breakEndsAt;
 
-  // Mount: read storage, judge it (a reload counts as time away), then sync.
-  useEffect(() => {
-    let saved: SavedSession | null = null;
-    try {
-      saved = parseSaved(localStorage.getItem(STORAGE_KEY));
-    } catch {
-      saved = null;
-    }
+  // Judge saved deadlines before displaying a timer, including a Strict return
+  // after the browser was suspended. A visible Grove route is still in the app.
+  const restore = useCallback(() => {
+    const saved = storage.readSession();
     const t = Date.now();
     if (saved) {
       let next = applyJudge(saved, t);
-      if (!next.ended && next.hiddenAt !== null && document.visibilityState === "visible") {
-        next = { ...next, hiddenAt: null };
+      if (!next.ended) {
+        const hiddenAt = document.visibilityState === "hidden" ? next.hiddenAt ?? t : null;
+        if (hiddenAt !== next.hiddenAt) next = { ...next, hiddenAt };
       }
       ref.current = next;
       setSession(next);
-      if (next !== saved) save(next);
+      if (next !== saved) storage.save(next);
     }
     setNow(t);
-    setReady(true);
-    syncAll();
-  }, [syncAll]);
+  }, [storage]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    lifetime.current = controller;
+    let recovering = false;
+    const recover = async () => {
+      if (recovering) return;
+      recovering = true;
+      await storage.recoverLegacy(controller.signal);
+      recovering = false;
+      if (controller.signal.aborted) return;
+      if (!ref.current) restore();
+      setReady(true);
+      // The session effect sends a restored start/end once. Retried offline
+      // requests use the usual online/visibility listeners.
+      requestFlush();
+    };
+    if (storage.readSession()) {
+      restore();
+      setReady(true);
+    }
+    void recover();
+    window.addEventListener("online", recover);
+    return () => {
+      controller.abort();
+      const current = ref.current;
+      if (current && !current.ended && current.hiddenAt === null) {
+        storage.save({ ...current, hiddenAt: Date.now() });
+      }
+      window.removeEventListener("online", recover);
+    };
+  }, [storage, restore, requestFlush]);
 
   // Visibility, pagehide and online.
   useEffect(() => {
@@ -313,19 +329,19 @@ export function useFocusSession(): FocusSessionApi {
 
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onHidden);
-    window.addEventListener("pageshow", onVisible);
+    window.addEventListener("pageshow", onVisibility);
     window.addEventListener("online", onOnline);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onHidden);
-      window.removeEventListener("pageshow", onVisible);
+      window.removeEventListener("pageshow", onVisibility);
       window.removeEventListener("online", onOnline);
     };
   }, [commit, syncAll]);
 
   // While running: tick the clock about once a second and let judge decide.
   useEffect(() => {
-    if (!running || startedAt === undefined) return;
+    if ((!running && !onBreak) || startedAt === undefined) return;
     const id = setInterval(() => {
       const t = Date.now();
       setNow(t);
@@ -335,7 +351,7 @@ export function useFocusSession(): FocusSessionApi {
       if (next !== s) commit(next);
     }, 1000);
     return () => clearInterval(id);
-  }, [running, startedAt, commit]);
+  }, [running, onBreak, startedAt, commit]);
 
   // Wake lock under the strict rule: ask now and again whenever the page is visible.
   useEffect(() => {
@@ -387,7 +403,7 @@ export function useFocusSession(): FocusSessionApi {
   useEffect(() => {
     if (startedAt === undefined) return;
     void sync();
-  }, [startedAt, sessionId, endedFlag, synced, sync]);
+  }, [startedAt, endedFlag, sync]);
 
   const start = useCallback<FocusSessionApi["start"]>(
     ({ plannedMinutes, rule, taskIds, plant }) => {
@@ -396,9 +412,8 @@ export function useFocusSession(): FocusSessionApi {
       if (taskIds.length === 0) return;
       if (cur?.ended && !cur.ended.synced) {
         // never overwrite an unsent end: park it in the pending list
-        addPending(cur);
-        if (syncing.current) flushWanted.current = true;
-        else void flushPending();
+        storage.addPending(cur);
+        requestFlush();
       }
       const t = Date.now();
       setNow(t);
@@ -414,25 +429,26 @@ export function useFocusSession(): FocusSessionApi {
         plant,
       });
     },
-    [commit, flushPending],
+    [commit, requestFlush, storage],
   );
 
   const tick = useCallback<FocusSessionApi["tick"]>(
     (taskId) => {
       const s = ref.current;
-      if (!s || s.ended) return;
+      if (!s || s.ended) return false;
       const t = Date.now();
 
       // A tick landing after the end time ends the session instead of recording.
       const judged = applyJudge(s, t);
       if (judged !== s) {
         commit(judged);
-        return;
+        return false;
       }
-      if (!s.taskIds.includes(taskId) || s.ticks.some((x) => x.taskId === taskId)) return;
+      if (!s.taskIds.includes(taskId) || s.ticks.some((x) => x.taskId === taskId)) return false;
 
       const withTick = { ...s, ticks: [...s.ticks, { taskId, at: t }] };
       commit(applyJudge(withTick, t));
+      return true;
     },
     [commit],
   );
@@ -449,18 +465,26 @@ export function useFocusSession(): FocusSessionApi {
     commit({ ...s, ended: { outcome: "GAVE_UP", at: t, synced: false } });
   }, [commit]);
 
+  const startBreak = useCallback(() => {
+    const s = ref.current;
+    if (!s || s.breakEndsAt !== undefined) return;
+    if (s.ended?.outcome !== "COMPLETED" && s.ended?.outcome !== "CLEARED") return;
+    const t = Date.now();
+    setNow(t);
+    commit({ ...s, breakEndsAt: t + BREAK_MS });
+  }, [commit]);
+
   const clear = useCallback(() => {
     const s = ref.current;
     if (!s || !s.ended) return;
     if (!s.ended.synced) {
       // keep the unsent end so it still reaches the server
-      addPending(s);
+      storage.addPending(s);
     }
     commit(null);
     // a sync in flight may still be creating this session's server id: let it finish first
-    if (syncing.current) flushWanted.current = true;
-    else void flushPending();
-  }, [commit, flushPending]);
+    requestFlush();
+  }, [commit, requestFlush, storage]);
 
-  return { ready, session, now, wakeLockOk, endsSynced, plantsDropped, start, tick, giveUp, clear };
+  return { owner, ready, session, now, wakeLockOk, endsSynced, plantsDropped, start, tick, giveUp, startBreak, clear };
 }

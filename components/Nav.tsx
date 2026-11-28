@@ -2,80 +2,99 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import {
+  BarChart2, Bookmark, BriefcaseBusiness, CalendarDays, CheckSquare, ChevronDown,
+  Clock, FolderKanban, Layers, LayoutTemplate, Leaf, LogOut, Moon, Settings,
+  Sprout, Timer, UserRound,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { accountEmail, signOutOfGrove } from "@/app/auth/actions";
-import {
-  CalendarDays,
-  FolderKanban,
-  CheckSquare,
-  Layers,
-  Clock,
-  BarChart2,
-  Settings,
-  LayoutTemplate,
-  Crosshair,
-  Bookmark,
-  Sun,
-  Moon,
-  LogOut,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useModeContext } from "./ModeProvider";
 import { useUserMode } from "./UserModeProvider";
 
-const NAV_ITEMS: { href: string; label: string; icon: typeof CalendarDays; teacherOnly?: boolean }[] = [
+const PRIMARY = [
   { href: "/daily", label: "Daily", icon: CalendarDays },
+  { href: "/focus", label: "Focus", icon: Timer },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
-  { href: "/projects", label: "Projects", icon: FolderKanban },
+];
+
+const PROJECTS = { href: "/projects", label: "Projects", icon: FolderKanban };
+const MORE: { href: string; label: string; icon: typeof CalendarDays; teacherOnly?: boolean }[] = [
+  PROJECTS,
   { href: "/sprints", label: "Sprints", icon: Layers, teacherOnly: true },
-  { href: "/focus", label: "Focus", icon: Crosshair },
-  { href: "/time", label: "Time", icon: Clock },
+  { href: "/time", label: "Time log", icon: Clock },
   { href: "/review", label: "Review", icon: BarChart2 },
   { href: "/templates", label: "Templates", icon: LayoutTemplate, teacherOnly: true },
   { href: "/lists", label: "Lists", icon: Bookmark },
 ];
 
+const focusRing = "focus-visible:[outline-style:solid] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-emerald-300";
+const tab = `flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-1 text-[13px] font-semibold transition-colors sm:px-2 lg:px-2.5 ${focusRing}`;
+const currentTab = "bg-white/[0.14] text-white";
+const currentMarker = "relative after:absolute after:inset-x-3 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-emerald-200";
+const idleTab = "text-slate-300 hover:bg-white/[0.08] hover:text-white";
+const panel = "absolute right-0 top-full z-50 mt-1 max-h-[60dvh] w-48 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 text-slate-800 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+const panelRow = "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium hover:bg-slate-100 focus-visible:[outline-style:solid] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-emerald-600 dark:hover:bg-zinc-800 dark:focus-visible:outline-emerald-300";
+
+type Panel = "more" | "account";
+
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [logoutError, setLogoutError] = useState(false);
+  const { mode, setMode } = useModeContext();
+  const { userMode, loading } = useUserMode();
   const [dark, setDark] = useState(false);
-  const [avatarOpen, setAvatarOpen] = useState(false);
-  const [userInitial, setUserInitial] = useState<string>("?");
-  const [mounted, setMounted] = useState(false);
-  const avatarRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => setMounted(true), []);
+  const [open, setOpen] = useState<Panel | null>(null);
+  const [userInitial, setUserInitial] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const accountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const isDark =
-      localStorage.getItem("grove-theme") === "dark" ||
-      (!localStorage.getItem("grove-theme") &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const theme = localStorage.getItem("grove-theme");
+    const isDark = theme === "dark" || (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches);
     setDark(isDark);
     document.documentElement.classList.toggle("dark", isDark);
   }, []);
 
   useEffect(() => {
     if (pathname === "/login") return;
-    accountEmail().then(email => { if (email) setUserInitial(email[0].toUpperCase()); }).catch(() => {});
+    accountEmail().then(email => {
+      if (email) setUserInitial(email.charAt(0).toUpperCase());
+    }).catch(() => {});
   }, [pathname]);
 
-  // Close avatar menu when clicking outside
+  useEffect(() => { setOpen(null); }, [pathname]);
+
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      const target = e.target as Node;
-      const insideAvatar = avatarRef.current?.contains(target);
-      const insideDropdown = dropdownRef.current?.contains(target);
-      if (!insideAvatar && !insideDropdown) {
-        setAvatarOpen(false);
+    if (!open) return;
+    const container = open === "more" ? moreRef.current : accountRef.current;
+    function dismissOutside(event: Event) {
+      if (event.target instanceof Node && !container?.contains(event.target)) setOpen(null);
+    }
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(null);
+        container?.querySelector("button")?.focus();
       }
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+    document.addEventListener("pointerdown", dismissOutside);
+    document.addEventListener("focusin", dismissOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside);
+      document.removeEventListener("focusin", dismissOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  function togglePanel(next: Panel) {
+    setOpen((current) => current === next ? null : next);
+    setSignOutError(false);
+  }
 
   function toggleDark() {
     const next = !dark;
@@ -84,118 +103,110 @@ export function Nav() {
     localStorage.setItem("grove-theme", next ? "dark" : "light");
   }
 
-  const { mode, setMode } = useModeContext();
-  const { userMode } = useUserMode();
-  const visibleNavItems = NAV_ITEMS.filter((item) => !item.teacherOnly || userMode === "TEACHER");
-
   async function signOut() {
-    if (!await signOutOfGrove().catch(() => false)) {
-      setLogoutError(true);
-      return;
+    setSigningOut(true);
+    setSignOutError(false);
+    try {
+      if (!await signOutOfGrove()) {
+        setSignOutError(true);
+        return;
+      }
+      setOpen(null);
+      router.push("/login");
+    } catch {
+      setSignOutError(true);
+    } finally {
+      setSigningOut(false);
     }
-    router.push("/login");
   }
 
+  const isCurrent = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const moreItems = MORE.filter((item) => !item.teacherOnly || (!loading && userMode === "TEACHER"));
+  const currentMore = moreItems.find(({ href }) => isCurrent(href));
+  const personal = mode === "PERSONAL";
+  const onProjects = currentMore?.href === PROJECTS.href;
+  const onSettings = isCurrent("/settings");
+
   return (
-    <nav className={cn(
-      "flex items-center gap-1 px-4 h-[52px] border-b shrink-0",
-      mode === "PERSONAL"
-        ? "bg-lime-950 border-lime-900"
-        : "bg-slate-900 dark:bg-zinc-900 border-slate-800 dark:border-zinc-800"
-    )}>
-      {/* Brand */}
-      <span className="text-xs font-black tracking-[0.2em] text-white mr-5 shrink-0">
-        Grove
-      </span>
+    <header className={cn("border-b border-black/15 text-white", personal ? "bg-[#263c2e]" : "bg-[#1b3034]")}>
+      <a href="#main-content" className="sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[60] focus:m-0 focus:h-auto focus:w-auto focus:overflow-visible focus:whitespace-normal focus:rounded-lg focus:bg-white focus:px-4 focus:py-3 focus:text-slate-900 focus:[clip:auto]">Skip to content</a>
+      <div className="mx-auto grid max-w-5xl grid-cols-[1fr_auto] items-center gap-x-2 px-3 sm:px-4 md:grid-cols-[auto_1fr_auto] md:gap-x-3 md:py-1.5">
+        <Link href="/daily" aria-label="Grove home" className={cn("flex min-h-11 w-fit items-center gap-2 rounded-lg pr-1", focusRing)}>
+          <Sprout aria-hidden="true" size={23} className="text-emerald-200" />
+          <span className="font-serif text-[25px] font-semibold leading-none tracking-tight">Grove</span>
+        </Link>
 
-      {/* Nav links */}
-      <div className="flex items-center gap-0.5 flex-1 overflow-x-auto">
-        {visibleNavItems.map(({ href, label, icon: Icon }) => {
-          const active =
-            pathname === href || pathname.startsWith(href + "/");
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0",
-                active
-                  ? mode === "PERSONAL"
-                    ? "bg-green-800 text-white"
-                    : "bg-slate-700 dark:bg-zinc-700 text-white"
-                  : "text-slate-400 hover:text-white hover:bg-slate-800 dark:hover:bg-zinc-800"
-              )}
-            >
-              <Icon className="h-3.5 w-3.5 shrink-0" />
-              {label}
+        <nav aria-label="Main navigation" className="col-span-2 row-start-2 grid grid-cols-[1fr_1fr_1fr_1.25fr] gap-1 border-t border-white/10 py-1 md:col-span-1 md:col-start-2 md:row-start-1 md:flex md:border-0 md:py-0">
+          {[...PRIMARY, PROJECTS].map(({ href, label, icon: Icon }) => (
+            <Link key={href} href={href} aria-current={isCurrent(href) ? "page" : undefined}
+              className={cn(tab, isCurrent(href) ? [currentTab, currentMarker] : idleTab, href === PROJECTS.href && "hidden md:flex")}>
+              <Icon aria-hidden="true" size={16} />{label}
             </Link>
-          );
-        })}
-      </div>
+          ))}
+          <div ref={moreRef} className="relative">
+            <button type="button"
+              aria-expanded={open === "more"} aria-controls={open === "more" ? "grove-more-pages" : undefined}
+              onClick={() => togglePanel("more")}
+              className={cn(tab, "w-full", currentMore || open === "more" ? currentTab : idleTab,
+                currentMore && currentMarker, onProjects && "md:after:hidden",
+                onProjects && open !== "more" && "md:bg-transparent md:text-slate-300 md:hover:bg-white/[0.08] md:hover:text-white")}>
+              <span className={onProjects ? "md:hidden" : undefined}>
+                {currentMore?.label ?? "More"}<span className="sr-only">{currentMore ? ", more pages" : " pages"}</span>
+              </span>
+              {onProjects && <span className="hidden md:inline">More<span className="sr-only"> pages</span></span>}
+              <ChevronDown aria-hidden="true" size={14} className={open === "more" ? "rotate-180" : ""} />
+            </button>
+            {open === "more" && (
+              <div id="grove-more-pages" className={panel}>
+                {moreItems.map(({ href, label, icon: Icon }) => (
+                  <Link key={href} href={href} onClick={() => { setOpen(null); moreRef.current?.querySelector("button")?.focus(); }}
+                    aria-current={isCurrent(href) ? "page" : undefined}
+                    className={cn(panelRow, href === PROJECTS.href && "md:hidden", isCurrent(href) && "bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100")}>
+                    <Icon aria-hidden="true" size={16} />{label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </nav>
 
-      {/* Mode toggle */}
-      <div className="bg-slate-800 rounded-full p-0.5 flex gap-0.5 border border-slate-700 shrink-0 mx-2">
-        <button
-          onClick={() => setMode("PROFESSIONAL")}
-          className={cn(
-            "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-            mode === "PROFESSIONAL" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"
-          )}
-        >
-          💼 Pro
-        </button>
-        <button
-          onClick={() => setMode("PERSONAL")}
-          className={cn(
-            "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-            mode === "PERSONAL" ? "bg-green-600 text-white" : "text-slate-400 hover:text-white"
-          )}
-        >
-          🌿 Home
-        </button>
-      </div>
-
-      {/* Right side controls */}
-      <div className="flex items-center gap-1 shrink-0 ml-2">
-        <button
-          onClick={toggleDark}
-          className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 dark:hover:bg-zinc-800 transition-colors"
-          title={dark ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
-
-        {/* Avatar + sign-out dropdown */}
-        <div className="relative" ref={avatarRef}>
-          <button
-            onClick={() => setAvatarOpen((o) => !o)}
-            className="w-7 h-7 rounded-full bg-blue-500 hover:bg-blue-400 flex items-center justify-center text-xs font-bold text-white transition-colors"
-          >
-            {userInitial}
-          </button>
-
-          {avatarOpen && mounted && createPortal(
-            <div ref={dropdownRef} className="fixed right-4 top-[56px] w-44 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-[9999]">
-              <Link
-                href="/settings"
-                onClick={() => setAvatarOpen(false)}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700"
-              >
-                <Settings className="h-3.5 w-3.5" />
-                Settings
-              </Link>
-              <button
-                onClick={signOut}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700 w-full text-left"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                {logoutError ? "Retry sign out" : "Sign out"}
+        <div className="col-start-2 row-start-1 flex items-center gap-1.5 py-1 md:col-start-3 md:py-0">
+          <div role="group" aria-label="Workspace" className="flex rounded-full bg-black/15 p-0.5 ring-1 ring-inset ring-white/15">
+            {([["PROFESSIONAL", "Work", BriefcaseBusiness], ["PERSONAL", "Home", Leaf]] as const).map(([value, label, Icon]) => (
+              <button key={value} type="button" aria-pressed={mode === value} onClick={() => setMode(value)}
+                className={cn("flex min-h-10 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold sm:px-3", focusRing,
+                  mode === value ? "bg-emerald-100 text-emerald-950 focus-visible:outline-emerald-800" : idleTab)}>
+                <Icon aria-hidden="true" size={13} className="hidden min-[400px]:block md:hidden lg:block" />{label}
               </button>
-            </div>,
-            document.body
-          )}
+            ))}
+          </div>
+          <div ref={accountRef} className="relative">
+            <button type="button" aria-label="Account and appearance" aria-expanded={open === "account"}
+              aria-controls={open === "account" ? "grove-account" : undefined} onClick={() => togglePanel("account")}
+              className={cn("grid size-11 place-items-center rounded-full", focusRing, onSettings || open === "account" ? currentTab : idleTab)}>
+              <span className="grid size-7 place-items-center rounded-full border border-white/30 bg-white/10 text-xs font-semibold text-white">
+                {userInitial || <UserRound aria-hidden="true" size={15} />}
+              </span>
+            </button>
+            {open === "account" && (
+              <div id="grove-account" className={panel}>
+                <Link href="/settings" aria-current={onSettings ? "page" : undefined} onClick={() => { setOpen(null); accountRef.current?.querySelector("button")?.focus(); }} className={panelRow}>
+                  <Settings aria-hidden="true" size={16} />Settings
+                </Link>
+                <button type="button" onClick={toggleDark} aria-pressed={dark} className={panelRow}>
+                  <Moon aria-hidden="true" size={16} />Dark mode
+                  <span aria-hidden="true" className="ml-auto text-xs">{dark ? "On" : "Off"}</span>
+                </button>
+                <div className="my-1 border-t border-slate-200 dark:border-zinc-700" />
+                <button type="button" disabled={signingOut} onClick={signOut} className={panelRow}>
+                  <LogOut aria-hidden="true" size={16} />{signingOut ? "Signing out…" : "Sign out"}
+                </button>
+                {signOutError && <p role="alert" className="px-3 py-2 text-xs text-red-700 dark:text-red-300">Couldn’t sign out. Try again.</p>}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </nav>
+    </header>
   );
 }
