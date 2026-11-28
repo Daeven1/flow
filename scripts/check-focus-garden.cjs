@@ -7,14 +7,15 @@ const path = require("node:path");
 const os = require("node:os");
 const sharp = require("sharp");
 
-const origin = "http://127.0.0.1:43181";
+const sowingCase = process.argv.includes("--case=sowing");
+const origin = sowingCase ? "http://127.0.0.1:43184" : "http://127.0.0.1:43181";
 const output = path.resolve(__dirname, "../docs/focus-garden-preview");
 const screenshots = process.argv.includes("--screenshots");
 const dbKey = "fictional-focus-garden-records-v1";
 const legacyKey = "grove-focus-session";
 const owner = "fictional-focus-gardener";
 const sessionKey = `${legacyKey}:${owner}`;
-const allowedPaths = new Set(["/focus", "/daily", "/garden.js", "/garden.css", "/favicon.ico"]);
+const allowedPaths = new Set(["/focus", "/daily", "/garden.js", "/garden.css", "/favicon.ico", "/GeistVF.woff"]);
 const species = {
   CHICORY: "Common chicory",
   FIREWEED: "Fireweed",
@@ -521,6 +522,147 @@ async function fallback(browser) {
   }
 }
 
+// The pale ribbed hull has a distinct tan from the dark furrow, green terrain
+// and yellow plot ring. Use only the central plant region of the phone canvas.
+async function hullPixels(png) {
+  const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  let count = 0;
+  for (let y = Math.floor(info.height * 0.53); y < info.height; y++) {
+    for (let x = Math.floor(info.width * 0.44); x < info.width * 0.56; x++) {
+      const i = (y * info.width + x) * 3;
+      const [r, g, b] = data.subarray(i, i + 3);
+      if (r > 140 && r < 219 && r > g * 1.13 && g > b * 1.25 && b > 48 && b < 160) count++;
+    }
+  }
+  return count;
+}
+
+// Pin only Date. RAF, input, real WebGL and timers continue normally, so the
+// brief above-soil interval can be inspected on slow software renderers.
+async function sowing(browser) {
+  for (const reduce of [false, true]) {
+    const { context, page } = await open(browser, { width: 390, height: 844 }, { reduce });
+    const start = Date.UTC(2026, 6, 12, 10);
+    const settle = () => page.evaluate(() => new Promise(resolve => {
+      let n = 0;
+      function next() { if (++n === 8) resolve(); else requestAnimationFrame(next); }
+      requestAnimationFrame(next);
+    }));
+    const shot = async (name) => {
+      await settle();
+      const png = await page.locator("canvas").screenshot();
+      if (screenshots && ["seed", "tucking", "planted", "sprout"].includes(name)) await page.screenshot({ path: path.join(output, "chicory-" + name + ".png") });
+      return png;
+    };
+    try {
+      await page.addInitScript(() => {
+        const schedule = window.setTimeout.bind(window);
+        window.setTimeout = (callback, delay, ...args) => schedule(callback,
+          delay === 3000 ? 60000 : delay, ...args);
+      });
+      await page.clock.setFixedTime(new Date(start));
+      await visit(page, "?task=paper");
+      const setup = page.getByRole("region", { name: "Session setup" });
+      await setup.getByRole("button", { name: "Gentle" }).click();
+      await setup.getByRole("button", { name: /What to grow/ }).click();
+      await setup.getByRole("combobox", { name: /what to grow/i }).selectOption("CHICORY");
+      await setup.getByRole("button", { name: /Start [0-9]+-minute session/ }).click();
+      await active(page, species.CHICORY);
+      await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.id, sessionKey);
+      const saved = await read(page, sessionKey);
+      const seed = await shot(reduce ? "reduced" : "seed");
+      await page.clock.setFixedTime(new Date(start + 2200));
+      const mid = await shot(reduce ? "reduced-mid" : "tucking");
+      await page.clock.setFixedTime(new Date(start + 3100));
+      const soil = await shot(reduce ? "reduced-end" : "planted");
+      const [initialHull, midHull, endHull] = await Promise.all([seed, mid, soil].map(hullPixels));
+      console.log("Seed hull pixels (start, tucking, planted):", initialHull, midHull, endHull);
+      assert.equal(endHull, 0);
+      if (reduce) assert.deepEqual([initialHull, midHull], [0, 0]);
+      else assert.ok(initialHull > midHull && midHull > 1, "seed descends through the furrow");
+      if (reduce) assert.ok(seed.equals(soil), "reduced-motion canvas is planted immediately and stays still");
+      else assert.ok(!seed.equals(soil), "the sowing sequence changes the rendered canvas");
+      // Return the fictional clock to the first instant before recovering. A
+      // cue inferred from a saved start timestamp would now replay on screen.
+      await page.clock.setFixedTime(new Date(start));
+      await page.reload();
+      await active(page, species.CHICORY);
+      const recovered = await shot(reduce ? "reduced-reload" : "reload");
+      assert.equal(await hullPixels(recovered), 0, "reload never replays seed");
+      if (reduce) assert.ok(soil.equals(recovered), "restored planted frame matches reduced motion");
+      assert.equal((await read(page, sessionKey)).startedAt, saved.startedAt);
+      await page.getByRole("link", { name: "Daily", exact: true }).click();
+      await page.locator('a[href="/focus?task=paint"]').click();
+      await active(page, species.CHICORY);
+      assert.equal(await hullPixels(await shot(reduce ? "reduced-switch" : "switch")), 0, "task link never replays seed");
+      assert.deepEqual((await read(page, sessionKey)).taskIds, saved.taskIds);
+      await setProgress(page, saved, 1 / 16 + 0.001);
+      // Wait for the model’s normal easing to reach the first growth frame.
+      // Check actual green stem pixels in the plot center, not the timer caption.
+      let visibleStem = false;
+      for (let attempt = 0; attempt < 20 && !visibleStem; attempt++) {
+        const png = await page.locator("canvas").screenshot();
+        const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+        let green = 0;
+        for (let y = Math.floor(info.height * 0.70); y < info.height * 0.77; y++) {
+          for (let x = Math.floor(info.width / 2) - 4; x <= info.width / 2 + 4; x++) {
+            const i = (y * info.width + x) * 3;
+            const [r, g, b] = data.subarray(i, i + 3);
+            if (r < 126 && g > 145 && g < 175 && g > r * 1.3 && b < 102) green++;
+          }
+        }
+        visibleStem = green >= 5;
+        if (!visibleStem) await page.waitForTimeout(350);
+      }
+      assert.ok(visibleStem, "tiny green sprout is visible at the first milestone");
+      const sprout = await shot(reduce ? "reduced-sprout" : "sprout");
+      assert.ok(!sprout.equals(soil), "first established growth milestone changes the planted frame");
+      await frame(page, "390×844 chicory");
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await frame(page, "1440×900 chicory");
+    } finally { await context.close(); }
+  }
+  for (const mode of ["offline", "old-response", "late"]) {
+    const { context, page } = await open(browser, { width: 390, height: 844 }, { reduce: false });
+    try {
+      const start = Date.UTC(2026, 6, 12, 10);
+      await page.clock.setFixedTime(new Date(start));
+      await visit(page, "?task=paper");
+      const setup = page.getByRole("region", { name: "Session setup" });
+      await setup.getByRole("button", { name: "Gentle" }).click();
+      await page.evaluate(mode => {
+        const request = window.fetch;
+        window.fetch = async (input, init) => {
+          if (input !== "/api/focus/sessions" || init?.method !== "POST") return request(input, init);
+          if (mode === "offline") throw new TypeError("Fictional connection offline");
+          if (mode === "late") await new Promise(resolve => { window.releaseFictionalStart = resolve; });
+          const reply = await request(input, init);
+          if (mode !== "old-response") return reply;
+          const body = await reply.json();
+          delete body.acceptedSpecies;
+          return Response.json(body, { status: 201 });
+        };
+      }, mode);
+      await setup.getByRole("button", { name: /Start [0-9]+-minute session/ }).click();
+      await page.getByRole("timer", { name: "Focus time remaining" }).waitFor();
+      if (mode === "late") {
+        await page.waitForFunction(() => typeof window.releaseFictionalStart === "function");
+        await page.clock.setFixedTime(new Date(start + 4500));
+        await page.evaluate(() => window.releaseFictionalStart());
+        await active(page, species.CHICORY);
+        assert.equal(await hullPixels(await page.locator("canvas").screenshot()), 0, "late confirmation stays planted");
+      } else {
+        if (mode === "old-response") await page.waitForFunction(k => JSON.parse(localStorage.getItem(k))?.id, sessionKey);
+        const saved = await read(page, sessionKey);
+        assert.equal(mode === "offline" ? saved.id : saved.plant, null);
+        assert.equal(await page.locator(".focus-garden-caption").getByText(/Common chicory/).count(), 0);
+      }
+    } finally { await context.close(); }
+  }
+  console.log("PASS offline start, old acknowledgement and late confirmation");
+  console.log("PASS fictional chicory picker, timed sowing frames, reduced motion, recovery, task-link switch, first milestone and responsive controls");
+}
+
 (async () => {
   if (screenshots) fs.mkdirSync(output, { recursive: true });
   const browser = await playwright().chromium.launch({
@@ -528,7 +670,7 @@ async function fallback(browser) {
     args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
   });
   try {
-    const checks = { desktop: realStart, phone, strict: strictCompact, species: speciesAndLegacy, fallback, ownership, legacy, "legacy-server": legacyServer };
+    const checks = { sowing, desktop: realStart, phone, strict: strictCompact, species: speciesAndLegacy, fallback, ownership, legacy, "legacy-server": legacyServer };
     const requested = process.argv.find((arg) => arg.startsWith("--case="))?.slice("--case=".length);
     if (requested) {
       assert.ok(Object.hasOwn(checks, requested), "Unknown --case; choose " + Object.keys(checks).join(", "));

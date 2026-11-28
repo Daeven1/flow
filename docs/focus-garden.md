@@ -42,3 +42,25 @@ The integration branch includes the production main revision `2a12050` and the e
 New named planting is off by default. The signed-in Grove read advertises whether the server accepts new named plants. Older responses and a failed fetch keep the picker on the four original species. Existing named sessions and trees remain readable, completable and tendable with the switch off. A repeated start uses its stored result. A stale request for a new named plant on a disabled server keeps the timer as a plain session with zero seed cost. These changes use the existing database columns.
 
 For a future authorized release, keep `GROVE_NAMED_PLANT_STARTS` unset while compatible clients and servers roll out. Enable the server-only value `1` only after every serving version can render and process named species. If a rollback is necessary after named records have been saved, turn off new named starts and retain compatible readers. The existing Vercel Preview and Production environments share database and Supabase bindings. An authenticated staging deployment for write tests would need its own fictional database and auth environment.
+
+
+### Chicory sowing preview
+
+From this checkout, run `node scripts/focus-garden-preview.cjs 43184` and open
+[the fictional Focus picker](http://127.0.0.1:43184/focus?task=paper) on the same Mac.
+The link selects “Fold a paper lantern.” In session setup choose **Gentle**, open
+**What to grow**, select **Common chicory**, then press **Start**. In a fresh
+private window the seed briefly rests above the soil, then slips into the furrow.
+Reload immediately to see the planted state. Reduce Motion skips directly there.
+At the first existing growth milestone (1/16 of the chosen duration), two tiny
+seed leaves emerge. Choose a fresh private browser context for another new start.
+
+The preview runs on loopback with fictional records. Its local browser test is
+`node scripts/check-focus-garden.cjs --case=sowing --screenshots`. It fixes the
+fictional clock and samples the real rendered plant after a session start.
+Compare these full-size phone captures in order:
+
+[Seed](focus-garden-preview/chicory-seed.png) ·
+[Tucking into the soil](focus-garden-preview/chicory-tucking.png) ·
+[Planted](focus-garden-preview/chicory-planted.png) ·
+[First sprout](focus-garden-preview/chicory-sprout.png)
