@@ -12,6 +12,7 @@
  */
 import * as THREE from "three";
 import type { Species, Spot } from "./layout";
+import { botanicalHeight, botanicalReach, buildBotanical } from "./botanicalModels";
 
 export type Theme = "light" | "dark";
 export type PlantModel = {
@@ -42,7 +43,8 @@ export function fullHeight(species: Species, stage = 1): number {
     case "FERN": return 0.6;
     case "BERRY_BUSH": return 0.55;
     case "TREE": return TREE_HEIGHTS[treeStage(stage) - 1];
-    default: return 0.7;
+    case "WILDFLOWERS": return 0.7;
+    default: return botanicalHeight(species, stage);
   }
 }
 
@@ -954,7 +956,8 @@ const SMALL_REACH = { WILDFLOWERS: 0.76, FERN: 0.69, BERRY_BUSH: 0.41 } as const
 /** How far a plant of this species and stage can reach sideways from its spot centre, in any state. */
 export function plantReach(species: Species, stage = 1): number {
   if (species === "TREE") return treeStage(stage) === 3 ? MAX_CROWN_REACH : YOUNG_TREE_REACH;
-  return SMALL_REACH[species];
+  if (species === "WILDFLOWERS" || species === "FERN" || species === "BERRY_BUSH") return SMALL_REACH[species];
+  return botanicalReach(species, stage);
 }
 
 function buildTree(seed: number, theme: Theme, stageIn: number): PlantModel {
@@ -1207,7 +1210,8 @@ export function buildPlant(species: Species, seed: number, theme: Theme, stage =
     case "FERN": return buildFern(seed, theme);
     case "BERRY_BUSH": return buildBerryBush(seed, theme);
     case "TREE": return buildTree(seed, theme, stage);
-    default: return buildWildflowers(seed, theme);
+    case "WILDFLOWERS": return buildWildflowers(seed, theme);
+    default: return buildBotanical(species, seed, theme, stage);
   }
 }
 

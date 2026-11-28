@@ -10,9 +10,9 @@
  */
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { canTend, freeSpots, gridSize, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
-import { buildIsland, buildPlant, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
-import { BOUNCE_SCALE, SWAY_AMPLITUDE, plantBounds } from "@/lib/grove/framing";
+import { canTend, freeSpots, gridSize, isTree, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
+import { buildIsland, buildPlant, plantReach, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
+import { BOUNCE_SCALE, SWAY_AMPLITUDE, growingFrame, plantBounds } from "@/lib/grove/framing";
 import { WITHERED_GROWTH, approach, shownGrowth } from "@/lib/grove/tween";
 import type { Outcome } from "@/lib/focus/session";
 
@@ -204,7 +204,7 @@ type SyncInput = Pick<GroveCanvasProps, "plants" | "growing" | "pickable" | "sel
 const plantSeed = (species: Species, s: Spot) => hash(`${species}:${s.x},${s.y}`);
 /** A saved plant drawn at rest: full size for its stage, or the withered size (only a sapling withers). */
 const restingGrowth = (p: { species: Species; stage: number; status: GrovePlant["status"] }) =>
-  p.status === "WITHERED" && !(p.species === "TREE" && p.stage > 1) ? WITHERED_GROWTH : 1;
+  p.status === "WITHERED" && !(isTree(p.species) && p.stage > 1) ? WITHERED_GROWTH : 1;
 
 type Picks = { spot: (s: Spot) => void; tree: (id: string) => void };
 
@@ -378,10 +378,25 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
     return { dist, at };
   }
 
+  let portrait: ReturnType<typeof growingFrame> | null = null;
+  const pivot = new THREE.Vector3();
+
   function frame() {
     if (n === 0 || !island) return; // not synced yet
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    const subject = input.growing;
+    if (subject && subject.outcome === null) {
+      portrait = growingFrame(subject, width, height);
+      pivot.copy(spotToWorld(subject.spot));
+      target.set(0, portrait.centerY, 0);
+      dir.set(0, Math.sin(portrait.elevation), Math.cos(portrait.elevation));
+      place(target, portrait.distance);
+      return;
+    }
+    portrait = null;
+    root.position.set(0, 0, 0);
+    dir.set(0, Math.sin(ELEVATION), Math.cos(ELEVATION));
     const { resting, widest } = framePoints();
     const a = fit(resting, FILL);
     const b = fit(widest, MAX_FILL);
@@ -431,6 +446,7 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
   }
 
   function sync(next: SyncInput, rebuildAll = false) {
+    const previous = input.growing;
     input = next;
     const g = next.growing ?? null;
     const growingKey = g ? spotKey(g.spot) : null;
@@ -442,9 +458,11 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
     const wantN = gridSize(count);
     // Re-frame only when the grid or the tallest/widest plant changes (a new
     // plant, a tree reaching a new stage), never as a plant grows.
-    let reframe = false;
+    let reframe = previous?.species !== g?.species || previous?.stage !== g?.stage
+      || previous?.spot.x !== g?.spot.x || previous?.spot.y !== g?.spot.y
+      || (previous?.outcome === null) !== (g?.outcome === null);
     if (wantN !== n || rebuildAll || !island) {
-      reframe = wantN !== n;
+      reframe ||= wantN !== n;
       n = wantN;
       rebuildIsland();
     }
@@ -747,6 +765,11 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
     yaw = reduced ? yawTarget : approach(yaw, yawTarget, dt, YAW_HALF_LIFE);
     if (Math.abs(yaw - yawTarget) <= 1e-4) yaw = yawTarget;
     root.rotation.y = yaw;
+    const sin = Math.sin(yaw), cos = Math.cos(yaw);
+    if (portrait) {
+      // Turn about the plant itself, including when it occupies an edge plot.
+      root.position.set(-(pivot.x * cos + pivot.z * sin), 0, pivot.x * sin - pivot.z * cos);
+    }
 
     if (growing) {
       const gr = growing;
@@ -786,7 +809,19 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
       const w = ((now / s.period) * Math.PI * 2) + s.phase;
       s.holder.rotation.set(a * 0.6 * Math.sin(w * 0.77 + s.phase * 1.7), 0, a * Math.sin(w));
     };
-    for (const e of kept.values()) sway(e.sway);
+    for (const e of kept.values()) {
+      const holder = e.sway.holder;
+      holder.visible = true;
+      if (portrait) {
+        // On a phone, give the whole canvas to the current plant. In the
+        // wider landscape keep companions, unless one would cover the subject.
+        const dx = holder.position.x - pivot.x, dz = holder.position.z - pivot.z;
+        const inFront = dz * cos - dx * sin > 0;
+        const overlaps = Math.abs(dx * cos + dz * sin) <= portrait.reach + plantReach(e.species, e.stage);
+        holder.visible = !portrait.singlePlant && !(inFront && overlaps);
+      }
+      if (holder.visible) sway(e.sway);
+    }
     if (growing) sway(growing.sway);
   }
 

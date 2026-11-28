@@ -3,6 +3,7 @@ export const runtime = 'nodejs';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
+import { namedPlantStartsEnabled } from "@/lib/grove/rollout.server";
 import { seedBalance } from "@/lib/grove/seedStore";
 import { isSpecies, parseTz, witherExpiry } from "@/lib/grove/layout";
 import type { GrovePlant, PlantStatus } from "@/lib/grove/layout";
@@ -51,5 +52,5 @@ export async function GET(req: Request) {
   } catch (e) {
     console.error("grove: seed balance failed", e);
   }
-  return NextResponse.json(seeds === undefined ? { plants } : { plants, seeds });
+  return NextResponse.json({ plants, seeds, namedPlantStarts: namedPlantStartsEnabled() });
 }

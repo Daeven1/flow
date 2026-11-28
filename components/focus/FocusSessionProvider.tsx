@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowRight, Coffee, Timer } from "lucide-react";
@@ -9,7 +9,7 @@ import { Nav } from "@/components/Nav";
 import { UserModeProvider } from "@/components/UserModeProvider";
 import { AccountFocusStorage } from "@/lib/focus/accountStorage";
 import { joinFocusTabs } from "@/lib/focus/tabOwnership";
-import { createClient } from "@/lib/supabase/client";
+import { watchWorkspaceOwner, type WorkspaceOwner } from "@/lib/focus/workspaceOwner";
 import { formatClock, remainingMs } from "@/lib/focus/session";
 import { useFocusSession, type FocusSessionApi } from "@/lib/focus/useFocusSession";
 
@@ -97,23 +97,45 @@ const FocusTabs = memo(function FocusTabs({ owner, publish }: {
 });
 
 function SignedInWorkspace({ children }: { children: React.ReactNode }) {
-  const [account, setAccount] = useState({ id: null as string | null, generation: 0 });
+  const path = usePathname();
+  const [identity, setIdentity] = useState<WorkspaceOwner>({ state: "loading" });
+  const [generation, setGeneration] = useState(0);
   const previousOwner = useRef<string | null>(null);
+  const verifier = useRef<ReturnType<typeof watchWorkspaceOwner> | null>(null);
+  const owner = identity.state === "verified" ? identity.id : null;
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   useEffect(() => {
-    const { data } = createClient().auth.onAuthStateChange((_event, session) => {
-      const id = session?.user.id ?? null;
-      if (previousOwner.current === id) return;
-      previousOwner.current = id;
-      setSnapshot(null);
-      setAccount(prev => ({ id, generation: prev.generation + (prev.id ? 1 : 0) }));
+    const watch = watchWorkspaceOwner(next => {
+      const id = next.state === "verified" ? next.id : null;
+      if (id !== previousOwner.current) {
+        setSnapshot(null);
+        if (previousOwner.current) setGeneration(value => value + 1);
+        previousOwner.current = id;
+      }
+      setIdentity(next);
     });
-    return () => data.subscription.unsubscribe();
+    verifier.current = watch;
+    return () => { watch.stop(); verifier.current = null; };
   }, []);
   return (
-    <FocusContext.Provider value={snapshot?.owner === account.id ? snapshot : null}>
-      {account.id && <FocusTabs key={account.id} owner={account.id} publish={setSnapshot} />}
-      <Fragment key={account.generation}>{children}</Fragment>
+    <FocusContext.Provider value={snapshot?.owner === owner ? snapshot : null}>
+      {owner && <FocusTabs key={owner} owner={owner} publish={setSnapshot} />}
+      <UserModeProvider key={generation}>
+        <ModeProvider>
+          <Nav />
+          <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-5 sm:py-8">
+            <FocusReturnLink />
+            {path === "/focus" && identity.state === "unavailable" ? (
+              <div role="status" className="py-16 text-center">
+                <p>Reconnect to Grove to open your focus session.</p>
+                <button type="button" className="mt-2 min-h-11 px-3 underline" onClick={() => void verifier.current?.refresh()}>Try again</button>
+              </div>
+            ) : path === "/focus" && identity.state === "signed-out" ? (
+              <p className="py-16 text-center"><Link className="inline-block min-h-11 px-3 py-2 underline" href="/login">Sign in to open Focus</Link></p>
+            ) : children}
+          </main>
+        </ModeProvider>
+      </UserModeProvider>
     </FocusContext.Provider>
   );
 }
@@ -123,19 +145,7 @@ export function GroveWorkspace({ children }: { children: React.ReactNode }) {
   if (path === "/login" || path.startsWith("/login/") || path === "/auth" || path.startsWith("/auth/") || path === "/grove-lab") {
     return <main id="main-content">{children}</main>;
   }
-  return (
-    <SignedInWorkspace>
-      <UserModeProvider>
-        <ModeProvider>
-          <Nav />
-          <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-5 sm:py-8">
-            <FocusReturnLink />
-            {children}
-          </main>
-        </ModeProvider>
-      </UserModeProvider>
-    </SignedInWorkspace>
-  );
+  return <SignedInWorkspace>{children}</SignedInWorkspace>;
 }
 
 function FocusReturnLink() {

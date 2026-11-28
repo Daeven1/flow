@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { announceAccountChange } from "@/lib/focus/workspaceOwner";
 import { accountEmail, passwordSignIn, setAccountPassword } from "@/app/auth/actions";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,10 @@ export function GrovePasswordForm({ setup = false }: { setup?: boolean }) {
       else if (setup) {
         form.reset();
         setMessage("Password saved. You can now sign in with your email and Grove password.");
-      } else window.location.assign("/daily");
+      } else {
+        announceAccountChange();
+        window.location.assign("/daily");
+      }
     } catch {
       setMessage("Grove couldn’t reach the sign-in service. Please try again.");
     } finally {

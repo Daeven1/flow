@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import type { Species } from "@/lib/grove/layout";
+import { SPECIES_INFO, type Species } from "@/lib/grove/species";
 
 /** Display name, capitalised for buttons; lower case inside sentences. */
 export function speciesName(s: Species, inSentence = false): string {
-  const name = { WILDFLOWERS: "Wildflowers", FERN: "Fern", BERRY_BUSH: "Berry bush", TREE: "Tree" }[s];
-  return inSentence ? name.toLowerCase() : name;
+  const name = SPECIES_INFO[s].name;
+  return inSentence && s !== "CANADA_COLUMBINE" ? name.toLowerCase() : name;
 }
 
 /** The name on a "What to grow" button: a new tree starts as a sapling. */
@@ -31,6 +31,7 @@ export const TEND_HINT = "Tap a sapling or young tree to tend it.";
 
 /** Why a session's plant was turned down at start, for the session view and end screen. */
 export const DROPPED_LINE = {
+  UNAVAILABLE: "That plant isn’t available for a new session right now. Your timer will run without a plant.",
   SEEDS: "There weren't enough seeds for that plant, so this is a plain session.",
   TEND: "That tree can't be tended right now, so this is a plain session.",
   ERROR: "Something went wrong saving your plant, so this is a plain session.",

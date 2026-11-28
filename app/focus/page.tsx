@@ -1,5 +1,7 @@
 "use client";
 
+import "./focus-garden.css";
+
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -354,7 +356,7 @@ function FocusWorkspace({ focus }: { focus: FocusSessionApi }) {
   );
 
   return (
-    <div className={running ? "space-y-3" : "space-y-6"}>
+    <div className={running ? "focus-garden-page focus-garden-running space-y-2" : "focus-garden-page space-y-6"}>
       <header className={`flex items-center justify-between gap-4 ${!focus.session && !choosing ? "border-b border-slate-300/70 pb-2 dark:border-slate-700" : ""}`}>
         <div className="min-w-0">
           <h1 className={running ? "text-base font-semibold text-slate-700 dark:text-zinc-300" : "text-3xl font-semibold tracking-tight sm:text-4xl"}>
@@ -369,7 +371,7 @@ function FocusWorkspace({ focus }: { focus: FocusSessionApi }) {
         </div>
         {!focus.session && !choosing && grove.status !== "failed" && (
           <Grove plants={plants} label={`Your grove: ${plantCount(groveCount)}`}
-            className="h-[104px] w-[42%] max-w-[300px] sm:h-[145px]" fallback={null} />
+            className="focus-garden-header-scene" fallback={null} />
         )}
       </header>
       {linkNotice && !focus.session && <p role="status" className="text-sm">{linkNotice}</p>}
@@ -504,6 +506,7 @@ function FocusWorkspace({ focus }: { focus: FocusSessionApi }) {
                   plants={plants}
                   seeds={grove.seeds}
                   groveStatus={grove.status}
+                  namedPlantStarts={grove.namedPlantStarts}
                   onStart={input => { focus.start(input); updateDraft(emptyDraft); }}
                 />
                 <button

@@ -9,6 +9,7 @@ import {
   Sprout, Timer, UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { announceAccountChange } from "@/lib/focus/workspaceOwner";
 import { accountEmail, signOutOfGrove } from "@/app/auth/actions";
 import { useModeContext } from "./ModeProvider";
 import { useUserMode } from "./UserModeProvider";
@@ -111,6 +112,7 @@ export function Nav() {
         setSignOutError(true);
         return;
       }
+      announceAccountChange();
       setOpen(null);
       router.push("/login");
     } catch {

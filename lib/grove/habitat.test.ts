@@ -53,6 +53,15 @@ describe("residents", () => {
     expect(counts([plant("FERN"), plant("TREE")])).toEqual(zero());
   });
 
+  it("uses named flowers and trees for the same habitat thresholds as legacy plants", () => {
+    const flowering = [plant("CHICORY"), plant("BLUE_FLAG_IRIS")];
+    const trees = [plant("WHITE_SPRUCE", { stage: 3 }), plant("PAPER_BIRCH", { stage: 2 })];
+    expect(counts([...flowering, ...trees, ...many("BERRY_BUSH", 2)]))
+      .toEqual(c({ BUTTERFLY: 2, BEE: 1, BIRD: 1, SQUIRREL: 1 }));
+    expect(counts([plant("OSTRICH_FERN"), plant("MAIDENHAIR_FERN")])).toEqual(zero());
+    expect(counts([plant("FIREWEED", { status: "WITHERED" })])).toEqual(zero());
+  });
+
   it("4 flowering plants: 2 butterflies, 1 bee", () => {
     expect(counts(many("WILDFLOWERS", 4))).toEqual(c({ BUTTERFLY: 2, BEE: 1 }));
   });

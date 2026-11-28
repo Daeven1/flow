@@ -1,4 +1,5 @@
 import type { GrovePlant } from "./layout";
+import { isTree, SPECIES_INFO } from "./species";
 
 export const ANIMALS = ["BUTTERFLY", "BEE", "BIRD", "SQUIRREL"] as const;
 export type AnimalKind = (typeof ANIMALS)[number];
@@ -26,10 +27,10 @@ function bird(berryBushes: number, youngTrees: number, matureTrees: number): num
 
 export function residents(plants: GrovePlant[]): Resident[] {
   const alive = stableOrder(plants.filter((p) => p.status === "ALIVE"));
-  const flowering = alive.filter((p) => p.species === "WILDFLOWERS" || p.species === "BERRY_BUSH");
+  const flowering = alive.filter((p) => SPECIES_INFO[p.species].form === "Wildflowers" || p.species === "BERRY_BUSH");
   const bushes = alive.filter((p) => p.species === "BERRY_BUSH");
-  const youngTrees = alive.filter((p) => p.species === "TREE" && p.stage >= 2);
-  const matureTrees = alive.filter((p) => p.species === "TREE" && p.stage >= MATURE);
+  const youngTrees = alive.filter((p) => isTree(p.species) && p.stage >= 2);
+  const matureTrees = alive.filter((p) => isTree(p.species) && p.stage >= MATURE);
 
   const f = flowering.length;
   const wanted: Record<AnimalKind, number> = {

@@ -7,7 +7,9 @@ import { getUser } from "@/lib/auth";
 import { OWNER_HEADER } from "@/lib/focus/accountStorage";
 import { parseStart } from "@/lib/focus/validate";
 import { isSpecies, type GrovePlant } from "@/lib/grove/layout";
-import { fallbackPlant, replayedStart, resolvePlant, type ResolvedPlant } from "@/lib/grove/planting";
+import { NO_PLANT, fallbackPlant, replayedStart, resolvePlant, type ResolvedPlant } from "@/lib/grove/planting";
+import { namedPlantStartsEnabled } from "@/lib/grove/rollout.server";
+import { isLegacySpecies } from "@/lib/grove/species";
 import { costOf } from "@/lib/grove/seeds";
 import { seedBalance } from "@/lib/grove/seedStore";
 
@@ -36,6 +38,7 @@ export async function POST(req: Request) {
   if (!input) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
   const choice = input.plant;
+  const newNamedPlant = choice !== null && choice.tendId === undefined && !isLegacySpecies(choice.species);
   const base = {
     userId,
     startedAt: input.startedAt,
@@ -54,9 +57,19 @@ export async function POST(req: Request) {
       // wait the following read must see the preceding transaction's commit.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${base.userId}))`;
       const existing = await tx.focusSession.findFirst(stored);
-      if (existing) return replayedStart(existing, choice);
+      if (existing) {
+        const replay = replayedStart(existing, choice);
+        // Plain sessions do not store a decline reason. A retry must not infer a
+        // seed shortage for a named plant that may have been disabled at start.
+        return !replay.plantAccepted && newNamedPlant ? { ...replay, dropReason: "UNAVAILABLE" } : replay;
+      }
 
-      const { accepted, dropReason, ...plant } = await resolve(tx);
+      // Apply to both the normal and fallback transaction, before any balance
+      // lookup or plant write. Existing owned trees still use the tend checks.
+      const resolved = newNamedPlant && !namedPlantStartsEnabled()
+        ? { ...NO_PLANT, accepted: false, dropReason: "UNAVAILABLE" as const }
+        : await resolve(tx);
+      const { accepted, dropReason, ...plant } = resolved;
       const session = await tx.focusSession.create({ data: { ...base, ...plant } });
       return { id: session.id, plantAccepted: accepted, ...(dropReason ? { dropReason } : {}) };
     }, { isolationLevel: "ReadCommitted" });

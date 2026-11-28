@@ -87,7 +87,7 @@ function validate(v: unknown): SavedSession | null {
     ended,
     plant: parsePlant(v.plant),
   };
-  if (v.plantDropped === "SEEDS" || v.plantDropped === "TEND" || v.plantDropped === "ERROR") {
+  if (v.plantDropped === "SEEDS" || v.plantDropped === "TEND" || v.plantDropped === "ERROR" || v.plantDropped === "UNAVAILABLE") {
     out.plantDropped = v.plantDropped;
   }
   if (
@@ -124,6 +124,6 @@ export function droppedReason(
   reply: { plantAccepted?: unknown; dropReason?: unknown },
 ): PlantDropped | null {
   if (!plant || reply.plantAccepted !== false) return null;
-  if (reply.dropReason === "ERROR") return "ERROR";
+  if (reply.dropReason === "ERROR" || reply.dropReason === "UNAVAILABLE") return reply.dropReason;
   return plant.tendId !== undefined ? "TEND" : "SEEDS";
 }

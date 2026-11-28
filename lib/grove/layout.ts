@@ -1,8 +1,7 @@
-export const SPECIES = ["WILDFLOWERS", "FERN", "BERRY_BUSH", "TREE"] as const;
-export type Species = (typeof SPECIES)[number];
-/** Seeds a new plant costs. */
-export const COST: Record<Species, number> = { WILDFLOWERS: 0, FERN: 0, BERRY_BUSH: 2, TREE: 3 };
-/** TREE: 1 sapling, 2 young tree, 3 mature tree; every other species is always 1. */
+import { SPECIES, isTree, type Species } from "./species";
+export { COST, SPECIES, isTree, type Species } from "./species";
+
+/** Permanent tree stages earned by planting and tending. */
 export const MAX_STAGE = 3;
 export type PlantStatus = "ALIVE" | "WITHERED";
 export type Spot = { x: number; y: number };
@@ -15,7 +14,7 @@ export type PlantChoice = { species: Species; x: number; y: number; tendId?: str
 
 /** A living tree that has not reached its last stage. */
 export function canTend(p: GrovePlant): boolean {
-  return p.species === "TREE" && p.status === "ALIVE" && p.stage < MAX_STAGE;
+  return isTree(p.species) && p.status === "ALIVE" && p.stage < MAX_STAGE;
 }
 
 export function isSpecies(v: unknown): v is Species {
@@ -102,6 +101,6 @@ export function parsePlantChoice(v: unknown): PlantChoice | null {
   if (!ok(x) || !ok(y)) return null;
   if (tendId === undefined) return { species, x, y };
   if (typeof tendId !== "string" || tendId.length === 0 || tendId.length > 64) return null;
-  if (species !== "TREE") return null;
+  if (!isTree(species)) return null;
   return { species, x, y, tendId };
 }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OWNER_HEADER } from "@/lib/focus/accountStorage";
 import { POST } from "./route";
 
@@ -28,7 +28,10 @@ function start(plant: unknown = null, startedAt = firstStart, header: string | n
   }));
 }
 
+afterEach(() => vi.unstubAllEnvs());
+
 beforeEach(() => {
+  vi.stubEnv("GROVE_NAMED_PLANT_STARTS", undefined);
   vi.resetAllMocks();
   rows.length = 0;
   locks.clear();
@@ -135,5 +138,59 @@ describe("focus session start retries", () => {
     expect((await start(free, firstStart, "other-account")).status).toBe(401);
     expect(mock.transaction).not.toHaveBeenCalled();
     expect((await start(free, firstStart, null)).status).toBe(201);
+  });
+});
+
+describe("named plant rollout", () => {
+  it.each(["CHICORY", "PAPER_BIRCH"])("keeps the timer and rejects a stale %s start without charging", async (species) => {
+    const choice = { ...free, species };
+    const first = await start(choice);
+    vi.stubEnv("GROVE_NAMED_PLANT_STARTS", "1");
+    const retry = await start(choice);
+    for (const response of [first, retry]) {
+      expect(await response.json()).toEqual({ id: "session-1", plantAccepted: false, dropReason: "UNAVAILABLE" });
+    }
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ plantSpecies: null, plantCost: 0, tendPlantId: null });
+    expect(mock.balance).not.toHaveBeenCalled();
+    expect(mock.tree).not.toHaveBeenCalled();
+  });
+
+  it.each([["CHICORY", 0], ["PAPER_BIRCH", 3]] as const)("keeps an accepted %s on retry after the gate closes", async (species, cost) => {
+    const choice = { ...free, species };
+    vi.stubEnv("GROVE_NAMED_PLANT_STARTS", "1");
+    const first = await start(choice);
+    vi.stubEnv("GROVE_NAMED_PLANT_STARTS", "0");
+    const retry = await start(choice);
+    for (const response of [first, retry]) {
+      expect(await response.json()).toEqual({ id: "session-1", plantAccepted: true });
+    }
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ plantSpecies: species, plantCost: cost });
+    expect(mock.balance).toHaveBeenCalledTimes(cost ? 1 : 0);
+  });
+
+  it("keeps the gate closed in the fallback transaction", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    mock.transaction.mockRejectedValueOnce(new Error("Retry transaction"));
+    try {
+      const response = await start({ ...free, species: "CHICORY" });
+      expect(await response.json()).toEqual({ id: "session-1", plantAccepted: false, dropReason: "UNAVAILABLE" });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ plantSpecies: null, plantCost: 0 });
+    } finally { log.mockRestore(); }
+  });
+
+  it("tends the owner's established named tree with the gate closed, verifying its identity", async () => {
+    const choice = { ...tend, species: "WHITE_SPRUCE" };
+    mock.tree.mockResolvedValue({ ...choice, id: tend.tendId, x: 3, y: 0, stage: 1, status: "ALIVE", plantedAt: new Date(firstStart), witheredAt: null });
+    const response = await start(choice);
+    expect(await response.json()).toEqual({ id: "session-1", plantAccepted: true });
+    expect(mock.tree).toHaveBeenCalledWith({ where: { id: tend.tendId, userId: owner } });
+    expect(rows[0]).toMatchObject({ plantSpecies: "WHITE_SPRUCE", plantCost: 0, tendPlantId: tend.tendId });
+    const mismatch = await start({ ...choice, species: "PAPER_BIRCH" }, "2027-01-05T08:30:00Z");
+    expect(await mismatch.json()).toEqual({ id: "session-2", plantAccepted: false });
+    expect(rows[1]).toMatchObject({ plantSpecies: null, plantCost: 0, tendPlantId: null });
+    expect(mock.balance).not.toHaveBeenCalled();
   });
 });

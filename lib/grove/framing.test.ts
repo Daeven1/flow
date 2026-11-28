@@ -1,5 +1,7 @@
 import { expect, test } from "vitest";
-import { BOUNCE_SCALE, SWAY_TILT, plantBounds } from "./framing";
+import * as THREE from "three";
+import { SPECIES, isTree } from "./layout";
+import { BOUNCE_SCALE, SWAY_TILT, growingFrame, plantBounds } from "./framing";
 import { MAX_CROWN_REACH, MAX_PLANT_HEIGHT, fullHeight, plantReach } from "./models";
 
 const top = (h: number) => h * 1.06 * (1 + BOUNCE_SCALE) + 0.03;
@@ -33,5 +35,38 @@ test("an empty grove (or only the setup marker) frames for the smallest plant", 
     const one = plantBounds([{ species: sp, stage: 1 }]);
     expect(one.top).toBeGreaterThanOrEqual(b.top);
     expect(one.reach).toBeGreaterThanOrEqual(b.reach);
+  }
+});
+
+
+test("the growing plant fits the phone close-up and the wider desktop landscape", () => {
+  for (const [width, height] of [[288, 170], [365, 310], [360, 205], [1060, 630], [1400, 825]]) {
+    for (const species of SPECIES) {
+      const stage = isTree(species) ? 3 : 1;
+      const frame = growingFrame({ species, stage }, width, height);
+      const camera = new THREE.PerspectiveCamera(30, width / height, 0.1, 400);
+      camera.position.set(0, frame.centerY + Math.sin(frame.elevation) * frame.distance,
+        Math.cos(frame.elevation) * frame.distance);
+      camera.lookAt(0, frame.centerY, 0);
+      camera.updateMatrixWorld();
+      expect(frame.singlePlant).toBe(width < 680);
+      const h = fullHeight(species, stage) * 1.06;
+      const cube = new THREE.Box3(
+        new THREE.Vector3(-frame.reach, 0, -frame.reach),
+        new THREE.Vector3(frame.reach, h, frame.reach),
+      );
+      for (const y of [cube.min.y, cube.max.y]) {
+        for (const x of [cube.min.x, cube.max.x]) {
+          for (const z of [cube.min.z, cube.max.z]) {
+            const ndc = new THREE.Vector3(x, y, z).project(camera);
+            expect(Math.abs(ndc.x)).toBeLessThan(1);
+            expect(Math.abs(ndc.y)).toBeLessThan(1);
+          }
+        }
+      }
+      const base = new THREE.Vector3().project(camera);
+      const crown = new THREE.Vector3(0, h, 0).project(camera);
+      expect((crown.y - base.y) / 2).toBeGreaterThan(frame.singlePlant ? .29 : .23);
+    }
   }
 });

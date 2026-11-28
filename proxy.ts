@@ -2,6 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
+  // This route verifies the cookie itself. Give the clock a 401 for sign-out
+  // and a 503 for an auth outage instead of sending both through the login redirect.
+  if (request.nextUrl.pathname === "/api/focus/owner") return NextResponse.next({ request });
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

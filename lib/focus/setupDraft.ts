@@ -4,7 +4,7 @@ import { DEFAULT_LENGTH, LENGTHS, type FocusRule, type PlannedMinutes } from "./
 export type SetupOptions = {
   length: PlannedMinutes;
   rule: FocusRule | null;
-  choice: Species | "TEND";
+  choice: Species | "TEND" | null;
   spot: Spot | null;
   treeId: string | null;
   customizingPlant: boolean;
@@ -13,7 +13,7 @@ export type SetupDraft = { taskIds: string[]; choosing: boolean; options: SetupO
 
 export function emptyDraft(): SetupDraft {
   return { taskIds: [], choosing: false, options: {
-    length: DEFAULT_LENGTH, rule: null, choice: "WILDFLOWERS", spot: null, treeId: null, customizingPlant: false,
+    length: DEFAULT_LENGTH, rule: null, choice: null, spot: null, treeId: null, customizingPlant: false,
   } };
 }
 

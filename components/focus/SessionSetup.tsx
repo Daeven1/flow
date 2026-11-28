@@ -17,9 +17,11 @@ import {
   defaultSpot,
   freeSpots,
   gridSize,
+  isSpecies,
   type GrovePlant,
   type Species,
 } from "@/lib/grove/layout";
+import { LEGACY_SPECIES, PLANT_FORMS, SPECIES_INFO, isLegacySpecies } from "@/lib/grove/species";
 import type { GroveStatus } from "@/lib/grove/useGrove";
 import { Grove } from "@/components/grove/Grove";
 import { plantCount, seedCount, speciesButtonName } from "@/components/focus/groveText";
@@ -31,10 +33,11 @@ type Props = {
   plants: GrovePlant[];
   seeds: number | null; // from the last good grove load; null until one carries a balance
   groveStatus: GroveStatus;
+  namedPlantStarts: boolean;
   onStart: (input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[]; plant: SavedPlant | null }) => void;
 };
 
-type Choice = SetupOptions["choice"];
+type Choice = Exclude<SetupOptions["choice"], null>;
 
 const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:focus-visible:outline-blue-400";
@@ -81,7 +84,7 @@ function middleTree(trees: GrovePlant[]): GrovePlant | null {
   return best;
 }
 
-export function SessionSetup({ taskIds, options, onOptionsChange, plants, seeds, groveStatus, onStart }: Props) {
+export function SessionSetup({ taskIds, options, onOptionsChange, plants, seeds, groveStatus, namedPlantStarts, onStart }: Props) {
   const { length, choice, spot: picked, treeId: pickedTree, customizingPlant } = options;
   const [now, setNow] = useState(() => Date.now());
   const [deviceRule] = useState(() => defaultRule({
@@ -120,19 +123,26 @@ export function SessionSetup({ taskIds, options, onOptionsChange, plants, seeds,
     [trees, pickedTree],
   );
 
-  // What the session grows: the choice while it is still possible, otherwise wildflowers.
+  // A saved draft keeps its explicit species. A fresh setup follows the server capability.
   const tending = choice === "TEND" && tree !== null;
-  const species: Species = choice !== "TEND" && affordable(choice) ? choice : "WILDFLOWERS";
+  const defaultSpecies = namedPlantStarts ? "CHICORY" : "WILDFLOWERS";
+  const chosenSpecies = choice && choice !== "TEND" ? choice : null;
+  const species: Species = chosenSpecies && (namedPlantStarts || isLegacySpecies(chosenSpecies)) && affordable(chosenSpecies)
+    ? chosenSpecies : defaultSpecies;
   const selected: Choice = tending ? "TEND" : species;
-  const checkingChoice = groveStatus === "loading" && (choice === "TEND" || COST[choice] > 0 || picked !== null);
+  const checkingChoice = groveStatus === "loading" && (
+    choice === "TEND" || (chosenSpecies !== null && (COST[chosenSpecies] > 0 || !isLegacySpecies(chosenSpecies))) || picked !== null
+  );
   const plant: SavedPlant | null =
     groveStatus === "failed"
       ? null
       : tending && tree
-        ? { species: "TREE", x: tree.x, y: tree.y, tendId: tree.id, stage: tree.stage + 1 }
+        ? { species: tree.species, x: tree.x, y: tree.y, tendId: tree.id, stage: tree.stage + 1 }
         : groveStatus === "loading"
           ? loadingSpot && { species, x: loadingSpot.x, y: loadingSpot.y }
           : spot && { species, x: spot.x, y: spot.y };
+
+  const botany = SPECIES_INFO[tending && tree ? tree.species : species].botany;
 
   useEffect(() => {
     let timer: number;
@@ -221,47 +231,75 @@ export function SessionSetup({ taskIds, options, onOptionsChange, plants, seeds,
               <div id="focus-plant-label" className="mb-2 text-sm font-medium">
                 {seeds === null ? "Choose a plant" : `Your balance · ${seedCount(seeds)}`}
               </div>
-              <div role="group" aria-labelledby="focus-plant-label" className="grid grid-cols-2 gap-2">
-                {SPECIES.map((sp) => {
-                  const on = selected === sp;
-                  const short = shortBy(sp);
-                  const blocked = !affordable(sp);
-                  return (
+              {namedPlantStarts ? (
+                <select id="focus-plant-choice" aria-label="What to grow" aria-describedby="focus-plant-label" value={selected}
+                  onChange={event => {
+                    const value = event.target.value;
+                    if (value === "TEND" || isSpecies(value)) onOptionsChange({ choice: value });
+                  }}
+                  className={`min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium dark:border-zinc-700 dark:bg-zinc-900 ${focusRing}`}>
+                  {PLANT_FORMS.map(form => (
+                    <optgroup key={form} label={form}>
+                      {SPECIES.filter(sp => SPECIES_INFO[sp].form === form).map(sp => {
+                        const short = shortBy(sp);
+                        const price = COST[sp] === 0 ? "Free" : seedCount(COST[sp]);
+                        const balanceNote = affordable(sp) ? "" : short === null ? " · Checking your seeds…" : ` · Needs ${short} more`;
+                        return <option key={sp} value={sp} disabled={!affordable(sp)}>{speciesButtonName(sp)} · {price}{balanceNote}</option>;
+                      })}
+                    </optgroup>
+                  ))}
+                  {trees.length > 0 && <option value="TEND">Tend a tree · Free</option>}
+                </select>
+              ) : (
+                <div role="group" aria-labelledby="focus-plant-label" className="grid grid-cols-2 gap-2">
+                  {LEGACY_SPECIES.map((sp) => {
+                    const on = selected === sp;
+                    const short = shortBy(sp);
+                    const blocked = !affordable(sp);
+                    return (
+                      <button
+                        key={sp}
+                        type="button"
+                        aria-pressed={on}
+                        aria-disabled={blocked || undefined}
+                        onClick={() => {
+                          if (!blocked) onOptionsChange({ choice: sp });
+                        }}
+                        className={growClass(on, blocked)}
+                      >
+                        <span>{speciesButtonName(sp)}</span>{" "}
+                        <span className={costClass(on)}>
+                          {COST[sp] === 0
+                            ? "Free"
+                            : short === null
+                              ? "Checking your seeds…"
+                              : short > 0
+                                ? `Needs ${short} more`
+                                : seedCount(COST[sp])}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {trees.length > 0 && (
                     <button
-                      key={sp}
                       type="button"
-                      aria-pressed={on}
-                      aria-disabled={blocked || undefined}
-                      onClick={() => {
-                        if (!blocked) onOptionsChange({ choice: sp });
-                      }}
-                      className={growClass(on, blocked)}
+                      aria-pressed={tending}
+                      onClick={() => onOptionsChange({ choice: "TEND" })}
+                      className={`col-span-2 ${growClass(tending, false)}`}
                     >
-                      <span>{speciesButtonName(sp)}</span>{" "}
-                      <span className={costClass(on)}>
-                        {COST[sp] === 0
-                          ? "Free"
-                          : short === null
-                            ? "Checking your seeds…"
-                            : short > 0
-                              ? `Needs ${short} more`
-                              : seedCount(COST[sp])}
-                      </span>
+                      <span>Tend a tree</span>{" "}
+                      <span className={costClass(tending)}>Free</span>
                     </button>
-                  );
-                })}
-                {trees.length > 0 && (
-                  <button
-                    type="button"
-                    aria-pressed={tending}
-                    onClick={() => onOptionsChange({ choice: "TEND" })}
-                    className={`col-span-2 ${growClass(tending, false)}`}
-                  >
-                    <span>Tend a tree</span>{" "}
-                    <span className={costClass(tending)}>Free</span>
-                  </button>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
+              {botany && (
+                <p aria-live="polite" className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-zinc-400">
+                  <a href={`https://data.canadensys.net/vascan/taxon/${botany.vascanId}`} target="_blank" rel="noreferrer"
+                    className={`italic underline decoration-slate-400 underline-offset-2 ${focusRing}`}>{botany.scientificName}</a>
+                  {" · "}{botany.canadianRange}
+                </p>
+              )}
               <Grove
                 plants={groveStatus === "loaded" ? plants : []}
                 pickable={groveStatus === "loaded" && !tending}
@@ -279,7 +317,7 @@ export function SessionSetup({ taskIds, options, onOptionsChange, plants, seeds,
                       ? `Choose a tree to tend. Your grove: ${plantCount(plants.length)}`
                       : `Choose where to plant. Your grove: ${plantCount(plants.length)}`
                 }
-                className="mt-3 h-48 w-full sm:h-60"
+                className="focus-garden-selector mt-3 w-full"
                 fallback={null}
               />
               {groveStatus === "loaded" && plant && (

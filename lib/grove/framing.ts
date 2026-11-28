@@ -32,3 +32,19 @@ export function plantBounds(plants: Framed[]): { top: number; reach: number } {
   const top = h * 1.06 * (1 + BOUNCE_SCALE) + 0.03;
   return { top, reach: r * (1 + BOUNCE_SCALE) + top * Math.sin(SWAY_TILT) };
 }
+
+/** A session keeps a fixed lens from seed to mature plant. Its bounds come
+ * from the chosen species, independently of plot size and neighbouring trees. */
+export function growingFrame(plant: Framed, width: number, height: number) {
+  const singlePlant = width < 680;
+  const elevation = (singlePlant ? 14 : 18) * Math.PI / 180;
+  const h = fullHeight(plant.species, plant.stage) * 1.06 * (1 + BOUNCE_SCALE);
+  const reach = plantReach(plant.species, plant.stage) * (1 + BOUNCE_SCALE) + h * Math.sin(SWAY_TILT);
+  const halfHeight = h / 2;
+  const aspect = Math.max(1, width) / Math.max(1, height);
+  const desiredFill = singlePlant ? 0.88 : 0.71;
+  const verticalRadius = halfHeight * Math.cos(elevation) + reach * Math.sin(elevation);
+  const depth = halfHeight * Math.sin(elevation) + reach * Math.cos(elevation);
+  const distance = depth + Math.max(verticalRadius, reach / aspect) / (Math.tan(Math.PI / 12) * desiredFill);
+  return { distance, elevation, centerY: halfHeight, reach, singlePlant };
+}

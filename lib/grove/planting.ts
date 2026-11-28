@@ -59,7 +59,7 @@ export type ResolvedPlant = {
   accepted: boolean;
 };
 
-const NO_PLANT = { plantSpecies: null, plantX: null, plantY: null, plantCost: 0, tendPlantId: null };
+export const NO_PLANT = { plantSpecies: null, plantX: null, plantY: null, plantCost: 0, tendPlantId: null };
 
 /**
  * What a session start stores for the plant choice. tree: the user's plant the
@@ -73,7 +73,9 @@ export function resolvePlant(
 ): ResolvedPlant {
   if (!choice) return { ...NO_PLANT, accepted: true };
   if (choice.tendId !== undefined) {
-    if (!tree || tree.id !== choice.tendId || !canTend(tree)) return { ...NO_PLANT, accepted: false };
+    if (!tree || tree.id !== choice.tendId || tree.species !== choice.species || !canTend(tree)) {
+      return { ...NO_PLANT, accepted: false };
+    }
     return {
       plantSpecies: tree.species, plantX: tree.x, plantY: tree.y,
       plantCost: 0, tendPlantId: tree.id, accepted: true,

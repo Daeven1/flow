@@ -49,11 +49,13 @@ export function parseSeeds(body: unknown): number | null {
 export function useGrove(): {
   plants: GrovePlant[];
   seeds: number | null; // null until a load carries a balance
+  namedPlantStarts: boolean;
   status: GroveStatus;
   refresh(): void;
 } {
   const [plants, setPlants] = useState<GrovePlant[]>([]);
   const [seeds, setSeeds] = useState<number | null>(null);
+  const [namedPlantStarts, setNamedPlantStarts] = useState(false);
   const [status, setStatus] = useState<GroveStatus>("loading");
   const latest = useRef(0);
   const mounted = useRef(false);
@@ -71,12 +73,14 @@ export function useGrove(): {
         if (!list) throw new Error("not a grove");
         if (!current()) return;
         setPlants(list);
+        setNamedPlantStarts((body as { namedPlantStarts?: unknown }).namedPlantStarts === true);
         const balance = parseSeeds(body);
         if (balance !== null) setSeeds(balance);
         setStatus("loaded");
       })
       .catch(() => {
         if (!current()) return;
+        setNamedPlantStarts(false);
         setStatus((s) => (s === "loaded" ? s : "failed"));
       });
   }, []);
@@ -89,5 +93,5 @@ export function useGrove(): {
     };
   }, [refresh]);
 
-  return { plants, seeds, status, refresh };
+  return { plants, seeds, namedPlantStarts, status, refresh };
 }

@@ -148,7 +148,7 @@ export function SessionEnd({ now, session, plants, tasks, onStartBreak, onNew }:
           plants={others}
           growing={growing}
           label={`Your grove: ${plantCount(total)}`}
-          className="h-[clamp(160px,25svh,250px)] w-full bg-gradient-to-b from-transparent to-emerald-900/10 dark:to-emerald-100/5"
+          className="focus-garden-overview w-full bg-gradient-to-b from-transparent to-emerald-900/10 dark:to-emerald-100/5"
           fallback={null}
         />
       )}

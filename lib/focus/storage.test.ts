@@ -93,6 +93,7 @@ test("parseSaved reads plantDropped when valid and leaves it out otherwise", () 
   expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "SEEDS" }))).toEqual({ ...valid, plantDropped: "SEEDS" });
   expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "TEND" }))).toEqual({ ...valid, plantDropped: "TEND" });
   expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "ERROR" }))).toEqual({ ...valid, plantDropped: "ERROR" });
+  expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "UNAVAILABLE" }))).toEqual({ ...valid, plantDropped: "UNAVAILABLE" });
   expect(parseSaved(JSON.stringify({ ...valid, plantDropped: "NOPE" }))).toEqual(valid);
   expect(parseSaved(JSON.stringify({ ...valid, plantDropped: null }))).toEqual(valid);
   expect("plantDropped" in parseSaved(JSON.stringify(valid))!).toBe(false);
@@ -110,5 +111,6 @@ test("droppedReason: a turned-down plant says why", () => {
   expect(droppedReason(tendTree, { plantAccepted: false })).toBe("TEND");
   expect(droppedReason(bush, { plantAccepted: false, dropReason: "ERROR" })).toBe("ERROR");
   expect(droppedReason(tendTree, { plantAccepted: false, dropReason: "ERROR" })).toBe("ERROR");
+  expect(droppedReason(bush, { plantAccepted: false, dropReason: "UNAVAILABLE" })).toBe("UNAVAILABLE");
   expect(droppedReason(bush, { plantAccepted: false, dropReason: "WHO" })).toBe("SEEDS");
 });

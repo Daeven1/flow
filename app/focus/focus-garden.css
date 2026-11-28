@@ -1,0 +1,119 @@
+/* Only the Focus route borrows the space outside Grove's usual reading column. */
+main:has(.focus-garden-page) {
+  max-width: 104rem;
+  padding-inline: max(clamp(1rem, 3vw, 3.25rem), env(safe-area-inset-left)) max(clamp(1rem, 3vw, 3.25rem), env(safe-area-inset-right));
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+}
+main:has(.focus-garden-running) {
+  padding-top: clamp(.75rem, 2.8svh, 2rem);
+}
+.focus-garden-header-scene { width: 42%; height: 6.5rem; }
+@media (min-width: 700px) {
+  .focus-garden-header-scene { width: 60%; height: clamp(12rem, 28svh, 22rem); }
+}
+.focus-garden-selector { height: clamp(12rem, 35svh, 21rem); }
+.focus-garden-overview {
+  height: clamp(15rem, 42svh, 34rem);
+}
+.focus-garden-session { display: grid; gap: 1rem; }
+.focus-garden-field {
+  min-width: 0;
+  border: 1px solid #bbd3c2;
+  border-radius: 1.25rem;
+  background: linear-gradient(180deg, #edf7f8 0%, #ecf3df 82%, #e0ecd3 100%);
+  color: #234735;
+  box-shadow: 0 2px 8px rgb(38 70 51 / 5%);
+  overflow: hidden;
+}
+.dark .focus-garden-field {
+  border-color: #354d45;
+  color: #e1efe0;
+  background: linear-gradient(180deg, #152a3a, #213733 85%, #283e37);
+}
+.focus-garden-readout {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .75rem 1.05rem .45rem;
+}
+.focus-garden-clock { font-size: clamp(3rem, 7svh, 4.5rem); }
+.focus-garden-caption { padding: .45rem 1.05rem .85rem; }
+.focus-garden-canvas { height: clamp(7rem, min(31svh, calc(100svh - 31rem - env(safe-area-inset-bottom))), 24rem); }
+.focus-garden-canvas.focus-garden-warning { height: clamp(6rem, min(30svh, calc(100svh - 33rem)), 20rem); }
+.focus-garden-canvas > [tabindex]:focus-visible { outline-offset: -4px; }
+.focus-garden-tools { min-width: 0; }
+.focus-garden-action-task { display: none; }
+
+@media (min-width: 900px), (min-width: 520px) and (max-height: 540px) and (orientation: landscape) {
+  .focus-garden-session {
+    grid-template-columns: minmax(0, 1fr) clamp(13rem, 27vw, 26rem);
+    align-items: center;
+    gap: clamp(1rem, 3vw, 3rem);
+  }
+  .focus-garden-canvas, .focus-garden-canvas.focus-garden-warning {
+    height: clamp(11rem, calc(100svh - 18rem), 50rem);
+  }
+  .focus-garden-readout { padding: 1rem 1.5rem .5rem; }
+  .focus-garden-caption { padding-inline: 1.5rem; }
+}
+
+/* Phones use the free end of the page's heading for the exit control.
+   Its confirmation stays anchored there, in reach even with large text. */
+@media (max-width: 699px), (max-height: 450px) and (max-width: 950px) {
+  .focus-garden-running { position: relative; }
+  .focus-garden-running > :first-child { min-height: 2.75rem; }
+  .focus-garden-exit, .focus-garden-confirm { position: absolute; right: 0; top: 0; margin-top: 0; }
+  .focus-garden-confirm {
+    z-index: 1;
+    width: min(23rem, 100%);
+    max-width: 100%;
+    padding: .65rem .9rem;
+    border: 1px solid #cad8cf;
+    border-radius: .75rem;
+    background: #fafcf9;
+    box-shadow: 0 .25rem 1.25rem rgb(29 57 41 / 14%);
+  }
+  .dark .focus-garden-confirm { background: #1c302b; border-color: #405449; }
+}
+@media (max-width: 519px) and (max-height: 680px) {
+  .focus-garden-canvas { height: clamp(7rem, calc(100svh - 27rem), 14rem); }
+  .focus-garden-canvas.focus-garden-warning { height: clamp(6rem, calc(100svh - 30rem), 13rem); }
+  .focus-garden-clock { font-size: 2.5rem; }
+  .focus-garden-readout { padding-block: .45rem .15rem; }
+  .focus-garden-caption { padding-block: .25rem .5rem; }
+  main:has(.focus-garden-task-action) { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+  .focus-garden-task-action {
+    position: fixed;
+    z-index: 2;
+    inset: auto 0 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .65rem;
+    padding: .5rem max(.75rem, env(safe-area-inset-right)) max(.5rem, env(safe-area-inset-bottom)) max(.75rem, env(safe-area-inset-left));
+    border-top: 1px solid #c7cdbe;
+    background: #f8faef;
+  }
+  .dark .focus-garden-task-action { border-color: #405449; background: #1a3029; }
+  .focus-garden-action-task {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    font-size: .875rem;
+    line-height: 1.25;
+  }
+  .focus-garden-confirm { z-index: 3; }
+}
+
+@media (max-height: 450px) and (min-width: 520px) and (max-width: 950px) {
+  main:has(.focus-garden-running) { padding-top: .25rem; }
+  .focus-garden-clock { font-size: 2rem; }
+  .focus-garden-readout { padding: .4rem .75rem .15rem; }
+  .focus-garden-caption { padding: .2rem .75rem .45rem; }
+  .focus-garden-canvas, .focus-garden-canvas.focus-garden-warning {
+    height: clamp(5rem, calc(100svh - 17rem), 12rem);
+  }
+}

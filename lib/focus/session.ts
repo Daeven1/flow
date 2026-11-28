@@ -23,7 +23,7 @@ export type SavedSession = {
 /** A session's plant choice; a tend also keeps the stage its tree grows into (fixed at start). */
 export type SavedPlant = PlantChoice & { stage?: number };
 /** Why the server dropped a session's plant: not enough seeds, a tree that can't be tended, or a server error. */
-export type PlantDropped = "SEEDS" | "TEND" | "ERROR";
+export type PlantDropped = "SEEDS" | "TEND" | "ERROR" | "UNAVAILABLE";
 export type Segment = { taskId: string; minutes: number };
 
 export const GRACE_MS = 10_000;

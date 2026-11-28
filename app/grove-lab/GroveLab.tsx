@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Grove, type Growing } from "@/components/grove/Grove";
-import { MAX_STAGE, SPECIES, canTend, defaultSpot, freeSpots, gridSize, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
+import { MAX_STAGE, SPECIES, isTree, canTend, defaultSpot, freeSpots, gridSize, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
+import { SPECIES_INFO } from "@/lib/grove/species";
 import type { Outcome } from "@/lib/focus/session";
 
 const focusRing =
@@ -36,8 +37,8 @@ function labPlants(count: number): GrovePlant[] {
     const withered = i % 7 === 5 || witheredSapling;
     const species: Species =
       i % 4 === 2 || witheredSapling ? "TREE" : i === 4 || i === 11 ? "BERRY_BUSH" : i % 2 === 0 ? "WILDFLOWERS" : "FERN";
-    const stage = species === "TREE" ? (withered ? 1 : (trees % MAX_STAGE) + 1) : 1;
-    if (species === "TREE" && !withered) trees++; // withered saplings don't use up a stage
+    const stage = isTree(species) ? (withered ? 1 : (trees % MAX_STAGE) + 1) : 1;
+    if (isTree(species) && !withered) trees++; // withered saplings don't use up a stage
     out.push({
       id: `lab-${i}`,
       species,
@@ -51,10 +52,6 @@ function labPlants(count: number): GrovePlant[] {
   }
   return out;
 }
-
-const SPECIES_LABEL: Record<Species, string> = {
-  WILDFLOWERS: "Wildflowers", FERN: "Fern", BERRY_BUSH: "Berry bush", TREE: "Tree",
-};
 
 const OUTCOMES: { label: string; value: Outcome | null }[] = [
   { label: "None", value: null },
@@ -107,12 +104,12 @@ export default function GroveLab() {
     if (tend) {
       if (!tendTree) return null;
       return {
-        species: "TREE", spot: { x: tendTree.x, y: tendTree.y }, stage: tendTree.stage + 1,
+        species: tendTree.species, spot: { x: tendTree.x, y: tendTree.y }, stage: tendTree.stage + 1,
         progress: growth / 100, outcome, tendId: tendTree.id,
       };
     }
     if (!spot) return null;
-    return { species, spot, stage: species === "TREE" ? stage : 1, progress: growth / 100, outcome };
+    return { species, spot, stage: isTree(species) ? stage : 1, progress: growth / 100, outcome };
   }, [showGrowing, pickable, tendable, tend, tendTree, spot, species, stage, growth, outcome]);
 
   const total = count + (growing && !growing.tendId ? 1 : 0);
@@ -164,11 +161,11 @@ export default function GroveLab() {
           <div role="group" aria-labelledby="lab-species" className="flex flex-wrap gap-2">
             {SPECIES.map((s) => (
               <button key={s} type="button" aria-pressed={species === s} onClick={() => setSpecies(s)} className={choiceClass(species === s)}>
-                {SPECIES_LABEL[s]}
+                {SPECIES_INFO[s].name}
               </button>
             ))}
           </div>
-          {species === "TREE" && (
+          {isTree(species) && (
             <>
               <div id="lab-stage" className={labelClass + " mt-3"}>Tree stage (grows into)</div>
               <div role="group" aria-labelledby="lab-stage" className="flex gap-2">

@@ -38,6 +38,14 @@ describe("unfinished Focus setup", () => {
     expect(readDraft(work)).toEqual(emptyDraft());
   });
 
+  it("distinguishes a new planting choice from a saved legacy or named species", () => {
+    expect(emptyDraft().options.choice).toBeNull();
+    for (const choice of ["WILDFLOWERS", "PAPER_BIRCH", "CHICORY", null]) {
+      rows.set(work, JSON.stringify({ taskIds: ["sketch"], options: { choice } }));
+      expect(readDraft(work).options.choice).toBe(choice);
+    }
+  });
+
   it("retains a draft in the same tab when browser storage is unavailable", () => {
     vi.stubGlobal("sessionStorage", undefined);
     const key = "grove-focus-setup:offline:PERSONAL";
