@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const headers = { "Cache-Control": "private, no-store", Vary: "Cookie" };
