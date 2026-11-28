@@ -100,6 +100,16 @@ export default function FocusPage() {
     void loadNames();
   }, [loadNames]);
 
+  const handledShortcut = useRef(false);
+  useEffect(() => {
+    if (handledShortcut.current || loading || !focus.ready) return;
+    const id = new URLSearchParams(window.location.search).get("task");
+    if (!id || focus.session || !modeTasks.some(task => task.id === id && !task.done)) return;
+    handledShortcut.current = true;
+    setQueue([id]);
+    setChoosing(true);
+  }, [loading, focus.ready, focus.session, modeTasks]);
+
   const tasks = modeTasks.filter((t) => !t.done);
 
   // If the pile empties while choosing a session, go back to the builder.
