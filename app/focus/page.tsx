@@ -20,6 +20,7 @@ import { useTaskCompletions } from "@/lib/focus/useTaskCompletions";
 import { useGrove } from "@/lib/grove/useGrove";
 import { hasLanded, withPendingPlant, type PendingPlant } from "@/lib/grove/pending";
 import { Grove } from "@/components/grove/Grove";
+import { CHICORY_SOW_MS } from "@/lib/grove/sowingTime";
 import { plantCount, seedCount } from "@/components/focus/groveText";
 
 type Task = {
@@ -63,6 +64,22 @@ function useSetupDraft(owner: string, mode: Mode) {
 }
 
 function FocusWorkspace({ focus }: { focus: FocusSessionApi }) {
+  const [sowing, setSowing] = useState<{ startedAt: number; owner: string } | null>(null);
+  useEffect(() => {
+    const cancel = () => setSowing(null);
+    const onVisibility = () => { if (document.hidden) cancel(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", cancel);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", cancel);
+    };
+  }, [focus.owner]);
+  useEffect(() => {
+    if (!sowing) return;
+    const timeout = window.setTimeout(() => setSowing(null), Math.max(0, sowing.startedAt + CHICORY_SOW_MS - Date.now()));
+    return () => window.clearTimeout(timeout);
+  }, [sowing]);
   const requestedTask = useSearchParams().get("task");
   const { mode } = useModeContext();
   // Tasks for the queue builder: this mode only.
@@ -257,7 +274,7 @@ function FocusWorkspace({ focus }: { focus: FocusSessionApi }) {
     const leftover = (prev?.taskIds ?? []).filter(
       (id) => !ticked.has(id) && modeTasks.some((t) => t.id === id && !t.done),
     );
-    if (prev?.ended && prev.plant) {
+    if (prev?.ended && prev.plant && (prev.plant.species !== "CHICORY" || prev.id !== null)) {
       const { plant, ended, startedAt } = prev;
       setPendingPlants((list) => [
         ...list.filter((pp) => pp.startedAt !== startedAt),
@@ -401,6 +418,7 @@ function FocusWorkspace({ focus }: { focus: FocusSessionApi }) {
 
       {focus.session && !focus.session.ended ? (
         <SessionView
+          sowingAt={sowing?.owner === focus.owner && sowing.startedAt === focus.session.startedAt && focus.session.id ? sowing.startedAt : undefined}
           session={focus.session}
           now={focus.now}
           wakeLockOk={focus.wakeLockOk}
@@ -507,7 +525,13 @@ function FocusWorkspace({ focus }: { focus: FocusSessionApi }) {
                   seeds={grove.seeds}
                   groveStatus={grove.status}
                   namedPlantStarts={grove.namedPlantStarts}
-                  onStart={input => { focus.start(input); updateDraft(emptyDraft); }}
+                  onStart={input => {
+                    const startedAt = focus.start(input);
+                    setSowing(startedAt !== undefined && input.plant?.species === "CHICORY" &&
+                      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                      ? { startedAt, owner: focus.owner } : null);
+                    updateDraft(emptyDraft);
+                  }}
                 />
                 <button
                   type="button"

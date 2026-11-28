@@ -88,5 +88,6 @@ export async function POST(req: Request) {
     console.error("focus session start: plant step failed, starting with only a free plant", e);
     result = await storeStart(async () => fallbackPlant(choice));
   }
-  return NextResponse.json(result, { status: 201 });
+  return NextResponse.json(result.plantAccepted && choice?.species === "CHICORY"
+    ? { ...result, acceptedSpecies: choice.species } : result, { status: 201 });
 }

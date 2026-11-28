@@ -18,6 +18,7 @@ export type Theme = "light" | "dark";
 export type PlantModel = {
   group: THREE.Group;
   setGrowth(t: number): void; // 0 = just planted, 1 = full size; clamps
+  setSowing?(elapsedMs: number): void;
   setWithered(w: number): void; // 0 = healthy, 1 = fully withered; clamps
   dispose(): void; // disposes every geometry and material it created
 };

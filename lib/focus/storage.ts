@@ -121,8 +121,11 @@ export function shouldRetry(status: number): boolean {
  */
 export function droppedReason(
   plant: SavedPlant | null,
-  reply: { plantAccepted?: unknown; dropReason?: unknown },
+  reply: { acceptedSpecies?: unknown; plantAccepted?: unknown; dropReason?: unknown },
 ): PlantDropped | null {
+  // A pre-capability server can acknowledge the clock without accepting chicory.
+  if (plant?.species === "CHICORY" && reply.plantAccepted !== false &&
+      (reply.plantAccepted !== true || reply.acceptedSpecies !== "CHICORY")) return "UNAVAILABLE";
   if (!plant || reply.plantAccepted !== false) return null;
   if (reply.dropReason === "ERROR" || reply.dropReason === "UNAVAILABLE") return reply.dropReason;
   return plant.tendId !== undefined ? "TEND" : "SEEDS";

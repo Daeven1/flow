@@ -10,7 +10,11 @@ test.each(SPECIES)("%s grows from a small sprout to its full height", (sp) => {
   m.setGrowth(0); const h0 = height(m);
   m.setGrowth(0.5); const h5 = height(m);
   m.setGrowth(1); const h1 = height(m);
-  expect(h0).toBeGreaterThan(0.3 * fullHeight(sp));
+  if (sp === "CHICORY") {
+    // Newly planted chicory rests under a shallow patch of soil.
+    expect(h0).toBeGreaterThan(0);
+    expect(h0).toBeLessThan(0.02);
+  } else expect(h0).toBeGreaterThan(0.3 * fullHeight(sp));
   // The sprout is one size for all; the berry bush (0.55) is the shortest grown plant.
   expect(h0).toBeLessThan(0.5 * fullHeight(sp));
   expect(h5).toBeGreaterThan(h0);
@@ -22,7 +26,7 @@ test.each(SPECIES)("%s is visible from the first second", (sp) => {
   for (const seed of [1, 7, 11, 42]) {
     const m = buildPlant(sp, seed, "light"); m.setGrowth(0);
     const size = new THREE.Box3().setFromObject(m.group).getSize(new THREE.Vector3());
-    expect(Math.max(size.x, size.z)).toBeGreaterThanOrEqual(0.28);
+    expect(Math.max(size.x, size.z)).toBeGreaterThanOrEqual(sp === "CHICORY" ? 0.19 : 0.28);
   }
 });
 test.each(SPECIES)("%s never gets shorter as it grows", (sp) => {

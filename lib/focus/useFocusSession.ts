@@ -23,7 +23,7 @@ export type FocusSessionApi = {
   wakeLockOk: boolean | null; // null = not requested; false = unsupported or refused
   endsSynced: number; // goes up each time an end reaches the server (this session's or a pending one)
   plantsDropped: number[]; // startedAt of each session whose plant the server turned down (this page load)
-  start(input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[]; plant: SavedPlant | null }): void;
+  start(input: { plannedMinutes: PlannedMinutes; rule: FocusRule; taskIds: string[]; plant: SavedPlant | null }): number | undefined;
   tick(taskId: string): boolean; // true when accepted, including the last task
   giveUp(): void; // ends as GAVE_UP
   startBreak(): void; // once per successful session, survives a reload
@@ -428,6 +428,7 @@ export function useFocusSession(owner: string): FocusSessionApi {
         ended: null,
         plant,
       });
+      return t;
     },
     [commit, requestFlush, storage],
   );

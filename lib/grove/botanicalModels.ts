@@ -1,3 +1,4 @@
+import { buildChicorySeed, seedHeight } from "./chicorySowing";
 import * as THREE from "three";
 import { drawCanopy } from "./botanicalCanopy";
 import { drawFlower } from "./botanicalFlowers";
@@ -28,43 +29,22 @@ export function botanicalReach(species: NamedSpecies, stage: number) {
   return isTree(species) ? treeReach[stageIndex(stage)] : dimensions[species][1];
 }
 
-/** Common chicory has a small ribbed achene, tapered below the blunt crown. */
-function chicorySeed(shape: BotanicalShape, size: number) {
-  const bearing = shape.seedAngle;
-  const foot = radial(point(0, 0.010 * size, 0), bearing, -0.054 * size);
-  const crown = radial(foot, bearing, 0.102 * size, 0.129 * size);
-  const axis = crown.clone().sub(foot).normalize();
-  const side = point(-Math.sin(bearing), 0, Math.cos(bearing));
-  const across = axis.clone().cross(side);
-  const ring = (fraction: number, radius: number) => Array.from({ length: 5 }, (_, i) => {
-    const turn = 2 * Math.PI * i / 5;
-    return foot.clone().lerp(crown, fraction).addScaledVector(side, Math.cos(turn) * radius * size)
-      .addScaledVector(across, Math.sin(turn) * radius * size);
-  });
-  const lower = ring(0.18, 0.022), upper = ring(0.89, 0.047);
-  for (let i = 0; i < 5; i++) {
-    const j = (i + 1) % 5, brown = i % 2 ? 0xaa7742 : 0x97643c;
-    shape.triangle(foot, lower[i], lower[j], brown);
-    shape.triangle(lower[i], upper[i], upper[j], brown);
-    shape.triangle(lower[i], upper[j], lower[j], brown);
-    shape.triangle(upper[i], crown, upper[j], 0xc4a36d);
-    shape.rod(lower[i], upper[i], size * 0.0039, 0xd5b681, size * 0.0022);
-  }
+/** A shallow oval of freshly disturbed soil remains visible after sowing. */
+function furrow(shape: BotanicalShape) {
+  const center = point(0, 0.010, 0);
+  const edge = (i: number) => {
+    const a = 2 * Math.PI * i / 16;
+    return radial(radial(point(0, 0.002, 0), shape.seedAngle, 0.125 * Math.cos(a)),
+      shape.seedAngle + Math.PI / 2, 0.076 * Math.sin(a));
+  };
+  for (let i = 0; i < 16; i++) shape.triangle(center, edge(i + 1), edge(i), i % 4 ? 0x78563c : 0x866447);
 }
 
 function seedling(shape: BotanicalShape, t: number, chicory: boolean) {
   const seed = 1 - phase(t, 0.04, 0.19);
   const leaves = phase(t, 0.015, 0.16) * (1 - phase(t, 0.22, 0.35));
-  if (chicory && seed > 0) {
-    chicorySeed(shape, seed);
-    const root = phase(t, 0.015, 0.12);
-    if (root > 0) {
-      const start = radial(point(0, 0.010 * seed, 0), shape.seedAngle, -0.054 * seed);
-      const bend = radial(start, shape.seedAngle + 2.8, root * 0.039, -0.018 * root);
-      shape.rod(start, bend, 0.007 * seed, 0xe4d49c);
-      shape.rod(bend, radial(bend, shape.seedAngle + 2.0, root * 0.045), 0.005 * seed, 0xf1dea5, 0);
-    }
-  } else if (seed > 0) {
+  if (chicory && t === 0) furrow(shape);
+  if (!chicory && seed > 0) {
     shape.gem(point(0, 0.047 * seed, 0), 0.093 * seed, 0.047 * seed, 0.057 * seed, 0x957042);
     // Pale inner seam makes the split hull readable at the first milestone.
     shape.leaf(point(-0.058 * seed, 0.063 * seed, 0), point(0.064 * seed, 0.066 * seed, 0), 0.017 * seed, 0xd0ba78);
@@ -95,6 +75,7 @@ export function buildBotanical(species: NamedSpecies, seed: number, theme: Theme
   const startHeight = index ? treeHeights[index - 1] : 0.365 * height;
   const endReach = botanicalReach(species, stage);
   const startReach = index ? treeReach[index - 1] : endReach;
+  let achene: ReturnType<typeof buildChicorySeed> | undefined;
   let frame = -1;
   let wilt = 0;
   let originalColors: number[] = [];
@@ -115,6 +96,7 @@ export function buildBotanical(species: NamedSpecies, seed: number, theme: Theme
     const next = growthFrame(progress);
     if (frame === next) return;
     frame = next;
+    if (achene) achene.visible = false;
     const fraction = frame / GROWTH_STEPS;
     // A tended tree starts with precisely the final silhouette of its last session.
     const age = tree ? (index + fraction) / 3 : fraction;
@@ -141,7 +123,12 @@ export function buildBotanical(species: NamedSpecies, seed: number, theme: Theme
     for (let i = 0; i < positions.count; i++) radius = Math.max(radius, Math.hypot(positions.getX(i), positions.getZ(i)));
     const xzScale = Math.min(Math.max(yScale, minScale), mix(startReach, endReach, fraction) / Math.max(0.001, radius));
     geo.translate(0, -box.min.y, 0);
-    geo.scale(xzScale, yScale, xzScale);
+    if (species === "CHICORY" && next === 0) geo.translate(0, 0.004, 0);
+    else {
+      // Keep the first pair of cotyledons small, then join the established growth curve.
+      const scale = species === "CHICORY" && next <= 2 ? next * 0.32 : 1;
+      geo.scale(xzScale * scale, yScale * scale, xzScale * scale);
+    }
     geo.computeVertexNormals();
     geo.computeBoundingSphere();
     mesh.geometry.dispose();
@@ -152,10 +139,26 @@ export function buildBotanical(species: NamedSpecies, seed: number, theme: Theme
   setGrowth(1);
   return {
     group, setGrowth,
+    setSowing(elapsed) {
+      const y = species === "CHICORY" && frame === 0 ? seedHeight(elapsed) : null;
+      if (y === null) {
+        if (achene) achene.visible = false;
+        return;
+      }
+      if (!achene) {
+        achene = buildChicorySeed(new BotanicalShape(seed, false).seedAngle);
+        group.add(achene);
+      }
+      achene.position.y = y;
+      achene.visible = true;
+    },
     setWithered(value) {
       const next = index > 0 || !Number.isFinite(value) ? 0 : THREE.MathUtils.clamp(value, 0, 1);
       if (next !== wilt) { wilt = next; applyWilt(); }
     },
-    dispose() { mesh.geometry.dispose(); material.dispose(); },
+    dispose() {
+      mesh.geometry.dispose(); material.dispose();
+      achene?.geometry.dispose(); achene?.material.dispose();
+    },
   };
 }

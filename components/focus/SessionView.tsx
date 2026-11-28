@@ -65,6 +65,7 @@ export function FocusVisual({ progress, outcome }: { progress: number; outcome: 
 }
 
 type Props = {
+  sowingAt?: number;
   session: SavedSession;
   now: number;
   wakeLockOk: boolean | null;
@@ -84,7 +85,7 @@ function ignoreHeldKey(event: KeyboardEvent<HTMLDivElement>) {
   if (event.repeat && (event.key === "Enter" || event.key === " ")) event.preventDefault();
 }
 
-export function SessionView({ session, now, wakeLockOk, tasks, plants, groveStatus, onComplete, onGiveUp }: Props) {
+export function SessionView({ sowingAt, session, now, wakeLockOk, tasks, plants, groveStatus, onComplete, onGiveUp }: Props) {
   const [confirming, setConfirming] = useState(false);
   const endButton = useRef<HTMLButtonElement>(null);
   const keepButton = useRef<HTMLButtonElement>(null);
@@ -94,7 +95,9 @@ export function SessionView({ session, now, wakeLockOk, tasks, plants, groveStat
   const clock = formatClock(left);
   const minutesLeft = Math.ceil(left / 60_000);
   const p = progress(session, now);
-  const growing = growingFor(session.plant, plants, p, null);
+  const waitingForChicory = session.plant?.species === "CHICORY" && session.id === null;
+  const growing = growingFor(waitingForChicory ? null : session.plant, plants, p, null);
+  if (growing && sowingAt !== undefined) growing.sowingAt = sowingAt;
   const milestone = growing && (SPECIES_INFO[growing.species].botany
     ? `Growth ${growthFrame(p) + 1} of ${GROWTH_STEPS + 1}`
     : `${Math.floor(p * 100)}% grown`);

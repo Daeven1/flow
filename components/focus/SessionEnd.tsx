@@ -46,7 +46,7 @@ export function SessionEnd({ now, session, plants, tasks, onStartBreak, onNew }:
   const minutes = Math.min(session.plannedMinutes, Math.max(0, Math.round((ended.at - session.startedAt) / 60_000)));
   const focusTime = minutes === 0 ? "Under a minute of focus" : `${minutes} ${minutes === 1 ? "minute" : "minutes"} of focus`;
   const success = ended.outcome === "COMPLETED" || ended.outcome === "CLEARED";
-  const plant = session.plant;
+  const plant = session.plant?.species === "CHICORY" && session.id === null ? null : session.plant;
   const tend = plant?.tendId !== undefined;
   // Use the stage saved at the start even if the server already refreshed the tree.
   const growing = growingFor(plant, plants, progress(session, ended.at), ended.outcome);

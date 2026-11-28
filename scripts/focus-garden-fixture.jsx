@@ -144,7 +144,8 @@ async function previewRequest(input, init) {
       return json({}, 400);
     }
     const session = startSession(db, parsed);
-    return json({ id: session.id, plantAccepted: session.accepted }, 201);
+    return json({ id: session.id, plantAccepted: session.accepted,
+      ...(!legacyServer && session.plantSpecies === "CHICORY" && session.accepted ? { acceptedSpecies: "CHICORY" } : {}) }, 201);
   }
 
   if (request.method === "PATCH" && url.pathname.startsWith("/api/focus/sessions/")) {

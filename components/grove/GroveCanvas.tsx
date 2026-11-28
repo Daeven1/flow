@@ -13,6 +13,7 @@ import * as THREE from "three";
 import { canTend, freeSpots, gridSize, isTree, spots, type GrovePlant, type Species, type Spot } from "@/lib/grove/layout";
 import { buildIsland, buildPlant, plantReach, spotToWorld, type PlantModel, type Theme } from "@/lib/grove/models";
 import { BOUNCE_SCALE, SWAY_AMPLITUDE, growingFrame, plantBounds } from "@/lib/grove/framing";
+import { CHICORY_SOW_MS } from "@/lib/grove/sowingTime";
 import { WITHERED_GROWTH, approach, shownGrowth } from "@/lib/grove/tween";
 import type { Outcome } from "@/lib/focus/session";
 
@@ -24,6 +25,7 @@ import type { Outcome } from "@/lib/focus/session";
 export type Growing = {
   species: Species; spot: Spot; stage: number; progress: number; outcome: Outcome | null;
   tendId?: string;
+  sowingAt?: number;
 };
 
 export type GroveCanvasProps = {
@@ -576,6 +578,8 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
   function applyGrowing() {
     if (!growing) return;
     growing.model.setGrowth(growing.growth);
+    const sowingAt = input.growing?.sowingAt;
+    growing.model.setSowing?.(!reduced && sowingAt !== undefined ? Date.now() - sowingAt : Infinity);
     growing.model.setWithered(smooth(growing.wither));
     growing.sway.amount = growing.wither > 0.5 ? 0.4 : 1;
   }
@@ -753,6 +757,8 @@ function engineWith(renderer: THREE.WebGLRenderer, wrapper: HTMLDivElement, onFa
     if (down?.dragging) return true;
     if (Math.abs(yaw - yawTarget) > 1e-4) return true;
     if (growing) {
+      const started = input.growing?.sowingAt;
+      if (!reduced && started !== undefined && Date.now() - started < CHICORY_SOW_MS) return true;
       if (growing.growth !== growing.growthTarget || growing.wither !== growing.witherTarget) return true;
       if (growing.bouncePending) return true;
       if (growing.bounceAt !== null && now - growing.bounceAt < BOUNCE_MS) return true;

@@ -163,7 +163,8 @@ describe("named plant rollout", () => {
     vi.stubEnv("GROVE_NAMED_PLANT_STARTS", "0");
     const retry = await start(choice);
     for (const response of [first, retry]) {
-      expect(await response.json()).toEqual({ id: "session-1", plantAccepted: true });
+      expect(await response.json()).toEqual({ id: "session-1", plantAccepted: true,
+        ...(species === "CHICORY" ? { acceptedSpecies: species } : {}) });
     }
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ plantSpecies: species, plantCost: cost });
