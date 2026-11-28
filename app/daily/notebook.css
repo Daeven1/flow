@@ -1,7 +1,10 @@
+/* Only the Daily route opens onto the woodland floor. */
 body:has(.grove-notebook) {
   background: #312a20 url("/grove-daily/woodland.webp") center top / cover fixed;
 }
-body:has(.grove-notebook) nav { background-color: #30271f; }
+body:has(.grove-notebook) nav {
+  background-color: #30271f;
+}
 .grove-notebook {
   --paper: #faf6ed;
   --rule: #cdbfa7;
@@ -29,14 +32,18 @@ body:has(.grove-notebook) nav { background-color: #30271f; }
   font-family: Georgia, "Times New Roman", serif;
   color: var(--ink);
 }
-.grove-dateline h1 { font-size: clamp(1.6rem, 3vw, 2.3rem); line-height: 1.14; }
-.grove-dateline p, .grove-notebook .grove-stats .text-xs { color: var(--ink); }
+.grove-dateline h1 {
+  font-size: clamp(1.6rem, 3vw, 2.3rem);
+  line-height: 1.14;
+}
+.grove-dateline p { color: var(--ink); }
 .grove-notebook .grove-section-title { font-size: 1.08rem; }
 .grove-notebook .grove-stats > div, .grove-notebook .grove-panel {
   border-color: var(--rule);
   background-color: var(--paper);
   color: var(--ink);
 }
+.grove-notebook .grove-stats .text-xs { color: var(--ink); }
 .grove-notebook .grove-panel > :first-child {
   background-color: var(--wash);
   border-color: var(--rule);
@@ -57,4 +64,74 @@ body:has(.grove-notebook) nav { background-color: #30271f; }
 @media (max-width: 639px) {
   main:has(> .grove-notebook) { padding: .5rem .25rem; }
   .grove-notebook { border-radius: 6px; padding-inline: .5rem; }
+}
+
+/* The desktop page occupies the same proportion of the woodland as the reference. */
+body:has(.grove-notebook) {
+  background: url("/grove-daily/forest-left.webp") left top / 12% auto repeat-y fixed,
+              url("/grove-daily/forest-right.webp") right top / 13% auto repeat-y fixed, #35271c;
+}
+body:has(.grove-notebook) nav, .grove-notebook {
+  font-family: Georgia, "Times New Roman", serif;
+}
+body:has(.grove-notebook) nav { background: linear-gradient(110deg,#24160f,#302016 65%,#21140d); }
+body:has(.grove-notebook) nav a { color: #f7ead1; }
+main:has(> .grove-notebook) { width: 77%; max-width: 96rem; padding: 0; margin: .18rem auto 1rem; }
+.grove-notebook {
+  --ink: #352317;
+  --rule: #b7a186;
+  color: var(--ink);
+  border: solid transparent;
+  border-width: 16px 25px 19px 36px;
+  border-image: url("/grove-daily/bound-page.webp") 28 32 30 34 / 16px 25px 19px 36px round;
+  background: linear-gradient(#fff9ef55,#fff9ef55),url("/grove-daily/paper-grain.webp") center / 230px;
+  background-clip: padding-box;
+  padding: .4rem clamp(.8rem,2.1vw,2.2rem) 1.8rem;
+  border-radius: 24px;
+  box-shadow: 1px 4px 10px #140e0ac9;
+}
+.grove-notebook > * + * { margin-top: .85rem; }
+.grove-dateline { padding: .65rem .6rem .55rem; }
+.grove-dateline h1 { font-size: clamp(1.55rem,2.4vw,2.5rem); font-weight: 600; letter-spacing: -.035em; }
+.grove-notebook .grove-section-title { font-weight: 700; font-size: 1.18rem; }
+.grove-notebook .grove-stats > div, .grove-notebook .grove-panel,
+.grove-notebook .grove-panel > :first-child { background-color: transparent; }
+.grove-notebook .grove-stats > div { padding: .6rem 1rem; }
+.grove-notebook .grove-panel { border-width: 1px; border-radius: .85rem; }
+.grove-notebook .grove-panel > :first-child { padding-block: .55rem; }
+.grove-panel [data-rfd-draggable-id] { border-left-width: 0 !important; }
+.grove-panel [data-rfd-draggable-id]:not(.forage-flagged) { background: transparent; }
+.grove-panel [data-rfd-draggable-id] > .group { padding-block: .38rem; min-height: 2.25rem; }
+.grove-panel [title="Flag for this sitting"] svg { width: 1.5rem; height: .95rem; }
+.grove-focus { font-size: .78rem; border: 1px solid var(--rule); border-radius: .35rem; padding: .1rem .55rem; }
+.grove-focus:hover { background: #ab84552b; }
+.grove-panel .forage-flagged { background-size: 145% 100%; }
+.grove-panel .text-slate-400, .grove-panel .text-purple-300 { color: #756454; }
+.grove-panel .divide-y > :not([hidden]) ~ :not([hidden]) { border-color: #b7a18670; }
+@media (min-width: 740px) {
+  .grove-dateline::after {
+    inset: -.25rem 8% auto auto; width: 52%; height: 85%;
+    background: url("/grove-daily/vine-study.webp") center / contain no-repeat;
+    mask-image: linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent);
+    opacity: .95; z-index: -1;
+  }
+}
+.dark .grove-notebook {
+  --ink: #efe5ce; --rule: #827463;
+  background: linear-gradient(#28231fed,#28231fed),url("/grove-daily/paper-grain.webp");
+  background-clip: padding-box;
+}
+.dark .grove-panel .text-slate-400, .dark .grove-panel .text-purple-300 { color: #c4b5a3; }
+@media (max-width: 900px) { main:has(> .grove-notebook) { width: 94%; } }
+@media (max-width: 639px) {
+  main:has(> .grove-notebook) { width: 100%; }
+  .grove-notebook { padding: .3rem .3rem 1rem; border-width: 8px 6px 8px 9px; border-image-width: 8px 6px 8px 9px; }
+  .grove-panel [data-rfd-draggable-id] > .group { flex-wrap: wrap; gap: .35rem; }
+}
+@media (min-width: 740px) and (max-width: 1199px) {
+  .grove-dateline::after { width: 37%; right: 1%; }
+  .grove-dateline { padding-right: 39%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .grove-notebook .forage-flagged { animation: none; }
 }

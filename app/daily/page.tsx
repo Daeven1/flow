@@ -1,5 +1,6 @@
 "use client";
 import "./notebook.css";
+import Link from "next/link";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useModeContext, type Mode } from "@/components/ModeProvider";
@@ -838,6 +839,7 @@ export default function DailyPage() {
                               >
                                 <RainbowIcon active={flaggedForageIds.includes(task.id)} />
                               </button>
+                              <Link className="grove-focus" href={`/focus?task=${encodeURIComponent(task.id)}`} aria-label={`Focus on ${task.name}`}>Focus</Link>
                               <button
                                 onClick={() => startEditUrgent(task)}
                                 className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900 text-purple-300 hover:text-purple-600 transition-colors shrink-0"
