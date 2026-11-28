@@ -1,4 +1,5 @@
 "use client";
+import "./notebook.css";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useModeContext, type Mode } from "@/components/ModeProvider";
@@ -506,8 +507,8 @@ export default function DailyPage() {
     });
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="grove-notebook space-y-6">
+      <div className="grove-dateline">
         <h1 className={`text-xl font-bold ${headingCls}`}>
           {format(new Date(), "EEEE, d MMMM")}
         </h1>
@@ -515,7 +516,7 @@ export default function DailyPage() {
       </div>
 
       {/* ── Stats row ── */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grove-stats grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: "Done today", value: doneToday.length, accent: doneToday.length > 0 },
           { label: "Done this week", value: weekTaskCount },
@@ -540,12 +541,12 @@ export default function DailyPage() {
       </div>
 
       {/* ── THE GAIN — Did List ── */}
-      <div className={`rounded-xl border ${cardCls} overflow-hidden`}>
+      <div className={`grove-panel rounded-xl border ${cardCls} overflow-hidden`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-zinc-800 border-b border-slate-200 dark:border-zinc-800">
           <div className="flex items-center gap-2">
             <Trophy className="h-4 w-4 text-amber-500" />
-            <span className="font-medium text-sm">The Gain</span>
+            <span className="grove-section-title font-medium text-sm">The Gain</span>
             {weekTaskCount > 0 && (
               <span className="text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full font-medium">
                 {weekTaskCount} task{weekTaskCount !== 1 ? "s" : ""} this week · {formatMinutes(weekTotalMins)}
@@ -637,10 +638,10 @@ export default function DailyPage() {
       </div>
 
       {/* ── 🍇 TODAY'S FORAGE ── */}
-      <div className="rounded border-2 border-purple-300 dark:border-purple-800">
+      <div className="grove-panel rounded border-2 border-purple-300 dark:border-purple-800">
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-t bg-purple-50 dark:bg-purple-950 border-b border-purple-200 dark:border-purple-800">
           <Zap className="h-4 w-4 text-purple-500" />
-          <span className="font-medium text-sm text-purple-700 dark:text-purple-400">Today's Forage</span>
+          <span className="grove-section-title font-medium text-sm text-purple-700 dark:text-purple-400">Today's Forage</span>
           {/* Quick add to forage */}
           <form
             onSubmit={addToForage}

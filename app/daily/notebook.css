@@ -1,0 +1,60 @@
+body:has(.grove-notebook) {
+  background: #312a20 url("/grove-daily/woodland.webp") center top / cover fixed;
+}
+body:has(.grove-notebook) nav { background-color: #30271f; }
+.grove-notebook {
+  --paper: #faf6ed;
+  --rule: #cdbfa7;
+  --ink: #382f24;
+  --wash: #f2ecdf;
+  background-color: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: clamp(.8rem, 2.3vw, 2rem);
+  box-shadow: 0 3px 0 #bcae96, 0 5px 0 #887c68, 0 8px 28px #20190d55;
+}
+.dark .grove-notebook {
+  --paper: #292621;
+  --rule: #5c5448;
+  --ink: #f1e8d5;
+  --wash: #332f29;
+}
+.grove-dateline {
+  position: relative;
+  isolation: isolate;
+  padding-block: 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+.grove-dateline h1, .grove-notebook .grove-section-title, .grove-notebook h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--ink);
+}
+.grove-dateline h1 { font-size: clamp(1.6rem, 3vw, 2.3rem); line-height: 1.14; }
+.grove-dateline p, .grove-notebook .grove-stats .text-xs { color: var(--ink); }
+.grove-notebook .grove-section-title { font-size: 1.08rem; }
+.grove-notebook .grove-stats > div, .grove-notebook .grove-panel {
+  border-color: var(--rule);
+  background-color: var(--paper);
+  color: var(--ink);
+}
+.grove-notebook .grove-panel > :first-child {
+  background-color: var(--wash);
+  border-color: var(--rule);
+}
+@media (min-width: 740px) {
+  .grove-dateline { padding-right: 32%; }
+  .grove-dateline::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 .25rem auto;
+    width: 30%;
+    background: url("/grove-daily/ivy.webp") right center / contain no-repeat;
+    mix-blend-mode: multiply;
+    pointer-events: none;
+  }
+  .dark .grove-dateline::after { filter: grayscale(1) invert(1); mix-blend-mode: screen; }
+}
+@media (max-width: 639px) {
+  main:has(> .grove-notebook) { padding: .5rem .25rem; }
+  .grove-notebook { border-radius: 6px; padding-inline: .5rem; }
+}
