@@ -123,23 +123,23 @@ const stage = (t: number, a: number, b: number) => {
 const tiny = (v: number) => Math.max(0.001, v);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-type Tracker = {
+export type Tracker = {
   geometries: THREE.BufferGeometry[];
   materials: THREE.Material[];
 };
 
-function track<G extends THREE.BufferGeometry>(tr: Tracker, g: G): G {
+export function track<G extends THREE.BufferGeometry>(tr: Tracker, g: G): G {
   tr.geometries.push(g);
   return g;
 }
 
-function material(tr: Tracker, color: number | THREE.Color, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) {
+export function material(tr: Tracker, color: number | THREE.Color, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) {
   const m = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, metalness: 0, ...opts });
   tr.materials.push(m);
   return m;
 }
 
-function disposer(tr: Tracker) {
+export function disposer(tr: Tracker) {
   return () => {
     for (const g of tr.geometries) g.dispose();
     for (const m of tr.materials) m.dispose();
@@ -158,7 +158,7 @@ function prismGeometry(tr: Tracker, sides: number, taper: number) {
   return track(tr, g);
 }
 
-function fromTriangles(tr: Tracker, positions: number[]) {
+export function fromTriangles(tr: Tracker, positions: number[]) {
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   g.computeVertexNormals();
@@ -661,7 +661,7 @@ function buildFern(seed: number, theme: Theme): PlantModel {
 // polyhedron whose corners are pushed in or out a little (the same amount for
 // every copy of a corner, so the faces stay closed), so no two lumps match.
 
-function lumpGeometry(tr: Tracker, kind: "dodeca" | "ico0" | "ico1", rand: () => number, jitter: number) {
+export function lumpGeometry(tr: Tracker, kind: "dodeca" | "ico0" | "ico1", rand: () => number, jitter: number) {
   const g = kind === "dodeca" ? new THREE.DodecahedronGeometry(1, 0) : new THREE.IcosahedronGeometry(1, kind === "ico1" ? 1 : 0);
   const pos = g.attributes.position as THREE.BufferAttribute;
   const push = new Map<string, number>();
